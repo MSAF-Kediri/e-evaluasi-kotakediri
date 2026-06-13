@@ -1,0 +1,329 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Evaluasi PEMDI Kota Kediri</title>
+    
+    <script src="{% static 'evaluasi/tailwindcss.js' %}"></script>
+    <script src="{% static 'evaluasi/sweetalert2.all.min.js' %}"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+        
+        /* Menggunakan CSS Grid agar layout terbagi pasti dan tidak saling menindih */
+        .wrapper {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: 100vh;
+            transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Saat sidebar disembunyikan, kolom pertama mengecil jadi 0 */
+        .wrapper.sidebar-hidden {
+            grid-template-columns: 0px 1fr;
+        }
+
+        /* Atur Kontainer Sidebar */
+        .sidebar-container {
+        width: 260px;
+        overflow: hidden;
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        
+        /* Membuat posisi sidebar mengunci di layar (Sticky) */
+        position: -webkit-sticky; /* Dukungan browser Safari */
+        position: sticky;
+        top: 0;
+        height: 100vh; /* Tingginya pas memenuhi 1 layar monitor */
+        }
+
+        .wrapper.sidebar-hidden .sidebar-container {
+            width: 0px;
+        }
+
+        /* Area Konten Utama */
+        .main-content {
+            padding: 30px;
+            background-color: #f8fafc;
+            min-width: 0; /* Mencegah konten flex/grid meluap */
+            position: relative;
+        }
+
+        /* Tombol Mengambang saat sidebar hilang */
+        .btn-toggle-floating {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #0f172a;
+            color: white;
+            border: 1px solid #1e293b;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.2s ease;
+        }
+
+        .wrapper.sidebar-hidden .btn-toggle-floating {
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="global-loading-overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-200">
+        <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 max-w-xs text-center border border-slate-100">
+            <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+            <div>
+                <h3 class="text-sm font-bold text-slate-800">Memproses Data...</h3>
+                <p class="text-xs text-slate-500 mt-1">Mohon tunggu sejenak, sistem sedang mengamankan data Anda.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="wrapper" id="mainWrapper">
+        
+        <button class="btn-toggle-floating" onclick="globalToggleSidebar()" type="button">
+            ☰
+        </button>
+
+        <div class="sidebar-container">
+            {% include "evaluasi/sidebar.html" %}
+        </div>
+
+        <main class="main-content">
+            {% block content %}
+            {% endblock %}
+        </main>
+    </div>
+
+    <script>
+        function globalToggleSidebar() {
+            const wrapper = document.getElementById('mainWrapper');
+            if (!wrapper) return;
+
+            wrapper.classList.toggle('sidebar-hidden');
+            
+            // Simpan status ke memori browser
+            if (wrapper.classList.contains('sidebar-hidden')) {
+                localStorage.setItem('sidebarStatus', 'hidden');
+            } else {
+                localStorage.setItem('sidebarStatus', 'visible');
+            }
+        }
+
+        // Terapkan status memori sebelum render selesai agar tidak kedip
+        (function() {
+            const savedStatus = localStorage.getItem('sidebarStatus');
+            if (savedStatus === 'hidden') {
+                document.documentElement.addEventListener("DOMContentLoaded", function() {
+                    const wrapper = document.getElementById('mainWrapper');
+                    if (wrapper) wrapper.classList.add('sidebar-hidden');
+                });
+            }
+        })();
+
+        // Fungsi memunculkan loading screen
+        function showLoadingScreen() {
+            const overlay = document.getElementById('global-loading-overlay');
+            if (overlay) {
+                overlay.classList.remove('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        // Kondisi 1: Picu saat ada Form yang di-Submit (misal simpan kuesioner, verifikasi, login)
+        document.addEventListener("submit", function(event) {
+            // Pastikan bukan form fiktif atau yang di-cancel
+            if (!event.defaultPrevented) {
+                showLoadingScreen();
+            }
+        });
+
+        // Kondisi 2: Picu saat berpindah halaman via Klik Link (Anchor Tag)
+        document.addEventListener("click", function(event) {
+            // Cari apakah yang diklik adalah tag <a> atau bapaknya adalah tag <a>
+            const link = event.target.closest('a');
+            
+            if (link) {
+                const href = link.getAttribute('href');
+                const target = link.getAttribute('target');
+                
+                // Saring agar link download, javascript kosong, target tab baru, atau anchor internal (#) tidak memicu loading
+                if (
+                    href && 
+                    !href.startsWith('#') && 
+                    !href.startsWith('javascript:') && 
+                    target !== '_blank' &&
+                    !link.hasAttribute('download')
+                ) {
+                    showLoadingScreen();
+                }
+            }
+        });
+
+        // Proteksi Tambahan: Hilangkan loading jika user menekan tombol 'Back' di browser
+        window.addEventListener('pageshow', function(event) {
+            const overlay = document.getElementById('global-loading-overlay');
+            if (overlay) {
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+        });
+
+    </script>
+
+</body>
+
+<!-- ====== POP-UP MODAL NOTIFIKASI ====== -->
+{% if messages %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        {% for message in messages %}
+            // Membaca tipe tags pesan dari Django (success, error, info)
+            let messageType = "{{ message.tags }}";
+            let messageText = "{{ message }}";
+            
+            // Konfigurasi default icon SweetAlert2
+            let alertIcon = "info";
+            let confirmButtonColor = "#3B82F6"; // Warna Biru Tailwind
+            
+            if (messageType === "success") {
+                alertIcon = "success";
+                confirmButtonColor = "#10B981"; // Warna Hijau Emerald Tailwind
+            } else if (messageType === "error") {
+                alertIcon = "error";
+                confirmButtonColor = "#EF4444"; // Warna Merah Tailwind
+            }
+
+            // Eksekusi penayangan Modal Box di tengah layar
+            Swal.fire({
+                title: messageType === "success" ? "Berhasil!" : "Informasi",
+                text: messageText,
+                icon: alertIcon,
+                confirmButtonText: "Ok, Lanjutkan",
+                confirmButtonColor: confirmButtonColor,
+                showClass: {
+                    popup: 'animate__animated animate__fadeInUp animate__faster'
+                },
+                hideClass: {
+                    popup: 'animate__animated animate__fadeOutDown animate__faster'
+                }
+            });
+        {% endfor %}
+    });
+</script>
+{% endif %}
+
+<!-- ====== SCRIPT OTOMATIS TIMEOUT DISKONEKSI ====== -->
+<script>
+    // Durasi tidak-aktif sebelum muncul peringatan (29 menit = 1740 detik)
+    // Setelah peringatan, pengguna punya 60 detik untuk konfirmasi
+    const SESSION_IDLE_MS = (1800 - 60) * 1000;
+ 
+    // Jeda minimum antar ping ke server (1 menit) agar tidak membanjiri request
+    const PING_THROTTLE_MS = 60 * 1000;
+ 
+    let timeoutTimer = null;
+    let lastPingAt = 0;
+ 
+    // ------------------------------------------------------------------
+    // FUNGSI INTI 1: Ping server secara diam-diam untuk menyegarkan sesi
+    // Tidak reload halaman → isian form yang belum disimpan tetap aman
+    // ------------------------------------------------------------------
+    function pingServer() {
+        const now = Date.now();
+        if (now - lastPingAt < PING_THROTTLE_MS) return; // throttle
+        lastPingAt = now;
+ 
+        fetch("{% url 'ping_sesi' %}", {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        }).catch(function() {
+            // Diam-diam abaikan error jaringan, timer tetap jalan
+        });
+    }
+ 
+    // ------------------------------------------------------------------
+    // FUNGSI INTI 2: Reset timer mundur saat ada aktivitas pengguna
+    // ------------------------------------------------------------------
+    function resetIdleTimer() {
+        clearTimeout(timeoutTimer);
+        pingServer(); // Segarkan sesi di server bersamaan
+ 
+        timeoutTimer = setTimeout(function() {
+            // Waktu idle habis → tampilkan peringatan
+            Swal.fire({
+                title: "Sesi Anda Hampir Habis!",
+                text: "Anda tidak aktif cukup lama. Klik 'Saya Masih Aktif' untuk melanjutkan, atau sistem akan otomatis logout dalam 1 menit.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Saya Masih Aktif",
+                cancelButtonText: "Logout Sekarang",
+                confirmButtonColor: "#10B981",
+                cancelButtonColor: "#EF4444",
+                timer: 60000,
+                timerProgressBar: true,
+                allowOutsideClick: false
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    // Ping server untuk segarkan sesi, lalu reset timer
+                    // TIDAK reload halaman → isian form tetap aman
+                    lastPingAt = 0; // paksa ping terjadi meskipun throttle
+                    pingServer();
+                    resetIdleTimer();
+                } else {
+                    // Waktu habis atau klik "Logout Sekarang"
+                    window.location.href = "{% url 'logout' %}";
+                }
+            });
+        }, SESSION_IDLE_MS);
+    }
+ 
+    // ------------------------------------------------------------------
+    // DAFTARKAN EVENT LISTENER: Reset timer setiap ada aktivitas
+    // Menggunakan { passive: true } agar tidak memblokir scroll browser
+    // ------------------------------------------------------------------
+    document.addEventListener("DOMContentLoaded", function() {
+ 
+        // Mulai timer pertama kali
+        resetIdleTimer();
+ 
+        // Daftar event yang dianggap sebagai "pengguna masih aktif"
+        const aktifitasEvents = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
+ 
+        // Throttle reset agar tidak dipanggil ratusan kali per detik saat scroll
+        let throttleReset = null;
+        function handleActivity() {
+            if (throttleReset) return;
+            throttleReset = setTimeout(function() {
+                throttleReset = null;
+                resetIdleTimer();
+            }, 5000); // Cukup reset timer setiap 5 detik sekali saat aktif
+        }
+ 
+        aktifitasEvents.forEach(function(eventName) {
+            document.addEventListener(eventName, handleActivity, { passive: true });
+        });
+    });
+</script>
+
+</html>

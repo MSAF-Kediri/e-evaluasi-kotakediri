@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Evaluasi PEMDI Kota Kediri</title>
+
+    {% load static %}
+
+    <link rel="icon" type="image/png" href="{% static 'evaluasi/Logo_Kota_Kediri.png' %}">
+    <script src="{% static 'evaluasi/tailwindcss.js' %}"></script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-md">
+        <div class="text-center mb-8">
+            <div
+                class="inline-flex items-center justify-center p-1 rounded-2xl shadow-xl shadow-slate-200/50 mb-4 animate-bounce">
+
+                <img src="{% static 'evaluasi/Logo_Kota_Kediri.png' %}" alt="Logo Pemkot Kediri"
+                    class="w-16 h-16 object-contain">
+
+            </div>
+            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">SISTEM EVALUASI PEMDI</h1>
+            <p class="text-sm text-slate-500 font-medium mt-1">Pemerintah Digital Kota Kediri</p>
+        </div>
+
+        <div class="bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
+            <h2 class="text-xl font-bold text-slate-800 mb-2">Selamat Datang</h2>
+            <p class="text-sm text-slate-400 mb-6">Silakan masuk menggunakan akun e-Government Anda</p>
+
+            {% if messages %}
+                {% for message in messages %}
+                    {% if message.tags == 'error' %}
+                        <div class="bg-rose-50 border border-rose-100 text-rose-700 p-3 rounded-xl mb-4 text-xs flex items-center gap-2 font-medium">
+                            <span>⚠️</span> {{ message }}
+                        </div>
+                    {% else %}
+                        <div class="bg-sky-50 border border-sky-100 text-sky-700 p-3 rounded-xl mb-4 text-xs flex items-center gap-2 font-medium">
+                            <span>ℹ️</span> {{ message }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+
+            <form method="POST" class="space-y-5">
+                {% csrf_token %}
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Username /
+                        NIP</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-sm">👤</span>
+                        <input type="text" name="username"
+                            class="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-slate-800 placeholder-slate-400"
+                            placeholder="Masukkan username" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Kata
+                        Sandi</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-sm">🔒</span>
+                        <input type="password" name="password"
+                            class="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-slate-800 placeholder-slate-400"
+                            placeholder="••••••••" required>
+                    </div>
+                </div>
+
+                <button type="submit"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-200 cursor-pointer">
+                    Masuk ke Dashboard
+                </button>
+            </form>
+        </div>
+
+        <p class="text-center text-xs text-slate-400 mt-8 font-medium">&copy; 2026 Dinas Komunikasi dan Informatika Kota
+            Kediri</p>
+    </div>
+
+</body>
+
+</html>

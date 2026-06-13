@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard E-Evaluasi PEMDI</title>
+
+    {% load static %}
+
+    <link rel="icon" type="image/png" href="{% static 'evaluasi/Logo_Kota_Kediri.png' %}" />
+    <script src="{% static 'evaluasi/tailwindcss.js' %}"></script>
+  </head>
+  <body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+    <nav class="bg-white border-b border-slate-100 sticky top-0 z-50 shadow-sm shadow-slate-100/40">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black shadow-md shadow-indigo-200">
+              <img src="{% static 'evaluasi/Logo_Kota_Kediri.png' %}" alt="Logo Pemkot Kediri" class="w-5 h-5 object-contain" />
+            </div>
+            <div>
+              <span class="font-black text-slate-950 tracking-tight block text-sm sm:text-base">E-EVALUASI PEMDI</span>
+              <span class="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Kota Kediri</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="hidden sm:block text-right">
+              <span class="block text-xs font-bold text-slate-700">{{ user.profile.nama_lengkap|default:user.username }}</span>
+              <span class="block text-[10px] text-indigo-600 font-medium">{{ user.profile.opd|default:'Instansi' }}</span>
+            </div>
+            <a href="{% url 'logout' %}" class="inline-flex items-center justify-center px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs rounded-xl transition duration-150 cursor-pointer">Keluar Sistem 🚪</a>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {% if messages %}
+        {% for message in messages %}
+          <div class="bg-emerald-50 border border-emerald-100 text-emerald-700 p-4 rounded-xl mb-6 text-sm flex items-center gap-2 font-medium shadow-sm">
+            <span>✅</span> {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="bg-linear-to-r from-indigo-600 to-indigo-800 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-indigo-900/10 mb-8 relative overflow-hidden">
+        <div class="relative z-10">
+          <span class="bg-indigo-500/30 text-indigo-100 px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase backdrop-blur-md">Sistem Berjalan Aktif</span>
+          <h2 class="text-xl sm:text-3xl font-black mt-3">Selamat Datang di Portal Evaluasi</h2>
+          <p class="text-sm text-indigo-100/80 mt-1 max-w-xl">Silakan lakukan pengisian koordinasi data indikator berdasarkan wewenang kelompok akses Anda di bawah ini.</p>
+        </div>
+        <div class="absolute -right-10 -bottom-10 w-44 h-44 bg-indigo-500/20 rounded-full blur-2xl"></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-1 space-y-6">
+          <div class="bg-white p-6 rounded-2xl shadow-sm shadow-slate-200/60 border border-slate-100">
+            <div class="flex items-center gap-3 pb-4 mb-4 border-b border-slate-100">
+              <span class="text-2xl">📋</span>
+              <h3 class="font-bold text-slate-900 text-base">Identitas Aparatur</h3>
+            </div>
+            <div class="space-y-4 text-xs sm:text-sm">
+              <div>
+                <span class="text-slate-400 text-[11px] block font-semibold uppercase tracking-wider">Nama Lengkap & Gelar</span>
+                <span class="text-slate-800 font-bold block mt-0.5">{{ user.profile.nama_lengkap|default:user.username }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 text-[11px] block font-semibold uppercase tracking-wider">NIP Pegawai</span>
+                <span class="text-slate-700 font-mono font-medium block mt-0.5">{{ user.profile.nip|default:'-' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 text-[11px] block font-semibold uppercase tracking-wider">OPD / Instansi Kerja</span>
+                <span class="text-slate-700 font-semibold block mt-0.5">{{ user.profile.opd|default:'-' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 text-[11px] block font-semibold uppercase tracking-wider">Jabatan Kedinasan</span>
+                <span class="text-slate-700 font-medium block mt-0.5">{{ user.profile.jabatan|default:'-' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 text-[11px] block font-semibold uppercase tracking-wider">Kontak No. HP</span>
+                <span class="text-slate-700 font-mono block mt-0.5">{{ user.profile.no_hp|default:'-' }}</span>
+              </div>
+              <div class="pt-4 border-t border-slate-100 mt-4">
+                <button type="button" onclick="openPasswordModal()" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 font-bold text-xs rounded-xl transition-all duration-150 cursor-pointer">⚙️ Pengaturan Keamanan Akun</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2 space-y-6">
+          <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm shadow-slate-200/60 border border-slate-100 min-h-[350px] flex flex-col justify-between">
+            <div>
+              <div class="flex items-center gap-3 pb-4 mb-6 border-b border-slate-100">
+                <span class="text-2xl">🔑</span>
+                <h3 class="font-bold text-slate-900 text-base">Ruang Kerja & Menu Navigasi</h3>
+              </div>
+
+              {% if user_role == 'SUPERADMIN' %}
+                <div class="space-y-4">
+                  <div class="p-4 bg-purple-50/70 border border-purple-100 rounded-xl text-purple-900">
+                    <span class="font-bold text-sm block mb-1">🛡️ Hak Akses: SUPERADMIN CONFIG (NATIVE)</span>
+                    <p class="text-xs text-purple-700 leading-relaxed">Anda memegang kendali penuh arsitektur aplikasi secara native. Seluruh modul konfigurasi master indikator, validasi bobot nilai, dan manajemen user terbuka sepenuhnya.</p>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <a href="/admin" class="p-3 bg-slate-50 hover:bg-purple-100/50 border border-slate-200 rounded-xl text-xs font-bold text-purple-900 transition flex items-center gap-2">⚙️ Buka Konsol Admin</a>
+                  </div>
+                </div>
+              {% elif user_role == 'SUPERVISOR' %}
+                <div class="space-y-4">
+                  <div class="p-4 bg-teal-50/70 border border-teal-100 rounded-xl text-teal-900">
+                    <span class="font-bold text-sm block mb-1">🔍 Hak Akses: SUPERVISOR (MONITORING & VERIFIKASI)</span>
+                    <p class="text-xs text-teal-700 leading-relaxed">Wewenang Anda mencakup peninjauan isian instrumen penilaian mandiri dari seluruh OPD Kota Kediri.</p>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <button class="p-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition text-left cursor-pointer">📝 Verifikasi Mandiri OPD</button>
+                  </div>
+                </div>
+              {% elif user_role == 'OPERATOR' %}
+                <div class="space-y-4">
+                  <div class="p-4 bg-amber-50/70 border border-amber-100 rounded-xl text-amber-900">
+                    <span class="font-bold text-sm block mb-1">✏️ Hak Akses: OPERATOR (INPUT EVALUASI MANDIRI)</span>
+                    <p class="text-xs text-amber-700 leading-relaxed">Silakan lengkapi instrumen kuesioner evaluasi tingkat kematangan tata kelola SPBE instansi Anda.</p>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <button class="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition text-left cursor-pointer">✍️ Isi Instrumen Penilaian</button>
+                  </div>
+                </div>
+              {% else %}
+                <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600">
+                  <span class="font-bold text-sm block mb-1">⚠️ Status Peran Tidak Dikenali</span>
+                  <p class="text-xs leading-relaxed">Akun Anda belum memiliki role aktif di sistem digital ini.</p>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="text-[11px] text-slate-400 mt-6 pt-4 border-t border-slate-100/80 font-medium">Log Sesi: Terkoneksi via Secure Dev Container PostgreSQL</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+
+  <div id="passwordModal"
+    class="{% if buka_modal_password %}
+      pointer-events-auto
+    {% else %}
+      pointer-events-none
+    {% endif %} fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div id="modalBackdrop"
+      class="{% if buka_modal_password %}
+        opacity-100 backdrop-blur-xs
+      {% else %}
+        opacity-0 backdrop-blur-none
+      {% endif %} absolute inset-0 bg-slate-900/40 transition-all duration-300 ease-out"
+      onclick="closePasswordModal()"></div>
+
+    <div id="modalContent"
+      class="{% if buka_modal_password %}
+        scale-100 opacity-100
+      {% else %}
+        scale-95 opacity-0
+      {% endif %} bg-white w-full max-w-md p-6 rounded-2xl shadow-2xl border border-slate-100 relative z-10 transform transition-all duration-300 ease-out">
+      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🔑</span>
+          <h3 class="font-bold text-slate-900 text-base">Perbarui Password</h3>
+        </div>
+        <button type="button" onclick="closePasswordModal()" class="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer">✕</button>
+      </div>
+
+      <p class="text-[11px] text-slate-400 mb-4">Demi keamanan data instansi, pastikan password baru Anda minimal 8 karakter dengan kombinasi huruf, angka, dan simbol.</p>
+
+      {% if messages %}
+        {% for message in messages %}
+          {% if message.tags == 'error' %}
+            <div class="bg-rose-50 border border-rose-100 text-rose-700 p-3 rounded-xl mb-4 text-xs font-medium flex items-center gap-2">
+              <span>⚠️</span> {{ message }}
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
+      <form method="POST" class="space-y-4">
+        {% csrf_token %}
+
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Password Saat Ini</label>
+          <input type="password" name="password_lama" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs" placeholder="••••••••" required />
+        </div>
+
+        <div class="border-t border-slate-100 pt-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Password Baru</label>
+          <input type="password" name="password_baru" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs" placeholder="Minimal 8 Karakter - Kombinasi Huruf, Angka, & Simbol" required />
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Konfirmasi Password Baru</label>
+          <input type="password" name="konfirmasi_password" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs" placeholder="Ulangi password baru" required />
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closePasswordModal()" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer">Batal</button>
+          <button type="submit" name="submit_password" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer">Simpan Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const modalContainer = document.getElementById('passwordModal')
+    const modalBackdrop = document.getElementById('modalBackdrop')
+    const modalContent = document.getElementById('modalContent')
+    
+    function openPasswordModal() {
+      // Aktifkan area klik container
+      modalContainer.classList.remove('pointer-events-none')
+      modalContainer.classList.add('pointer-events-auto')
+    
+      // Transisi blur dan kehitaman backdrop (Fade In Ringan)
+      modalBackdrop.classList.remove('opacity-0', 'backdrop-blur-none')
+      modalBackdrop.classList.add('opacity-100', 'backdrop-blur-xs')
+    
+      // Transisi mekarnya form utama (Scale Up)
+      modalContent.classList.remove('scale-95', 'opacity-0')
+      modalContent.classList.add('scale-100', 'opacity-100')
+    }
+    
+    function closePasswordModal() {
+      // Matikan area klik container
+      modalContainer.classList.remove('pointer-events-auto')
+      modalContainer.classList.add('pointer-events-none')
+    
+      // Memudarkan blur kembali ke normal (Fade Out)
+      modalBackdrop.classList.remove('opacity-100', 'backdrop-blur-xs')
+      modalBackdrop.classList.add('opacity-0', 'backdrop-blur-none')
+    
+      // Mengecilkan form utama
+      modalContent.classList.remove('scale-100', 'opacity-100')
+      modalContent.classList.add('scale-95', 'opacity-0')
+    }
+  </script>
+
+  <script>
+    // Memanipulasi address bar browser agar menyembunyikan teks '/dashboard/'
+    // dan menggantinya menjadi '/' tanpa memuat ulang halaman
+    window.history.pushState({}, document.title, '/')
+  </script>
+</html>

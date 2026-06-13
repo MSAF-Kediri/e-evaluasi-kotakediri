@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<div id="site-name" style="display: flex; align-items: center; gap: 12px;">
+    <img src="{% static 'evaluasi/Logo_Kota_Kediri.png' %}" 
+         alt="Logo Pemkot Kediri" 
+         style="height: 40px; width: auto; object-fit: contain; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15));">
+         
+    <h1 id="site-name-text" style="margin: 0; font-size: 18px; font-weight: 700; color: #f8fafc;">
+        {{ site_header|default:_('Django administration') }}
+    </h1>
+</div>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

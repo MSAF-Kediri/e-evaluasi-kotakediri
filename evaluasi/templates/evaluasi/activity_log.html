@@ -1,0 +1,123 @@
+{% extends "evaluasi/base.html" %}
+
+{% block content %}
+<div class="max-w-[1200px] mx-auto space-y-6">
+
+    <!-- HEADER -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Audit Trail</p>
+            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Log Aktivitas Pengguna</h1>
+            <p class="text-sm text-slate-500 font-medium mt-1">
+                {% if user_role == 'SUPERADMIN' %}Menampilkan seluruh aktivitas semua pengguna sistem{% else %}Menampilkan aktivitas operator dari OPD yang Anda supervisi{% endif %}
+            </p>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs font-extrabold">
+            📋 {{ logs|length }} Entri Terbaru
+        </span>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <form method="GET" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[140px]">
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Jenis Aksi</label>
+                <select name="aksi" class="w-full text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    <option value="">Semua Aksi</option>
+                    {% for value, label in semua_aksi %}
+                        <option value="{{ value }}" {% if filter_aksi == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1 min-w-[140px]">
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">OPD</label>
+                <select name="opd" class="w-full text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    <option value="">Semua OPD</option>
+                    {% for opd in semua_opd %}
+                        <option value="{{ opd.id }}" {% if filter_opd == opd.id|stringformat:"s" %}selected{% endif %}>{{ opd.nama_opd }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if user_role == 'SUPERADMIN' %}
+            <div class="flex-1 min-w-[140px]">
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Username</label>
+                <input type="text" name="user" value="{{ filter_user }}" placeholder="Cari username..."
+                       class="w-full text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+            </div>
+            {% endif %}
+            <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all">
+                🔍 Filter
+            </button>
+            <a href="{% url 'activity_log' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition-all">
+                Reset
+            </a>
+        </form>
+    </div>
+
+    <!-- TIMELINE FEED -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 bg-slate-50 border-b border-slate-100">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Timeline Aktivitas</h3>
+        </div>
+
+        {% if logs %}
+        <div class="p-6">
+            <div class="relative">
+                <!-- Garis vertikal timeline -->
+                <div class="absolute left-5 top-0 bottom-0 w-px bg-slate-100"></div>
+
+                <div class="space-y-0">
+                    {% for log in logs %}
+                    
+                    <!-- Tentukan warna & ikon berdasarkan jenis aksi -->
+                    {% if log.aksi == 'LOGIN' %}
+                        {% with dot_color="bg-emerald-500" border_color="border-emerald-100" bg_color="bg-emerald-50" text_color="text-emerald-700" icon="🔓" badge_bg="bg-emerald-100" badge_text="text-emerald-700" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'LOGOUT' %}
+                        {% with dot_color="bg-slate-400" border_color="border-slate-100" bg_color="bg-slate-50" text_color="text-slate-600" icon="🚪" badge_bg="bg-slate-100" badge_text="text-slate-500" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'SIMPAN_JAWABAN' %}
+                        {% with dot_color="bg-blue-500" border_color="border-blue-100" bg_color="bg-blue-50" text_color="text-blue-700" icon="💾" badge_bg="bg-blue-100" badge_text="text-blue-700" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'HAPUS_JAWABAN' %}
+                        {% with dot_color="bg-rose-400" border_color="border-rose-100" bg_color="bg-rose-50" text_color="text-rose-700" icon="🗑️" badge_bg="bg-rose-100" badge_text="text-rose-600" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'SUBMIT' %}
+                        {% with dot_color="bg-indigo-500" border_color="border-indigo-100" bg_color="bg-indigo-50" text_color="text-indigo-700" icon="🚀" badge_bg="bg-indigo-100" badge_text="text-indigo-700" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'APPROVE' %}
+                        {% with dot_color="bg-emerald-600" border_color="border-emerald-200" bg_color="bg-emerald-50" text_color="text-emerald-800" icon="✅" badge_bg="bg-emerald-200" badge_text="text-emerald-800" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'REJECT' %}
+                        {% with dot_color="bg-amber-500" border_color="border-amber-100" bg_color="bg-amber-50" text_color="text-amber-700" icon="❌" badge_bg="bg-amber-100" badge_text="text-amber-700" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% elif log.aksi == 'GANTI_PASSWORD' %}
+                        {% with dot_color="bg-violet-500" border_color="border-violet-100" bg_color="bg-violet-50" text_color="text-violet-700" icon="🔒" badge_bg="bg-violet-100" badge_text="text-violet-700" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% else %}
+                        {% with dot_color="bg-slate-400" border_color="border-slate-100" bg_color="bg-slate-50" text_color="text-slate-600" icon="📌" badge_bg="bg-slate-100" badge_text="text-slate-500" %}
+                        {% include "evaluasi/partials/log_item.html" %}
+                        {% endwith %}
+                    {% endif %}
+
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <div class="text-4xl mb-3">📭</div>
+            <p class="text-sm font-semibold text-slate-500">Belum ada log aktivitas yang ditemukan.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

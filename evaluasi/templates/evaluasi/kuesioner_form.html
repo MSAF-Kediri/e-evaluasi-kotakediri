@@ -1,0 +1,855 @@
+{% extends "evaluasi/base.html" %}
+{% load evaluasi_filters %}
+
+{% block content %}
+<div class="max-w-[1400px] mx-auto space-y-6">
+    
+    <!-- Header Halaman -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Instrumen Evaluasi: {{ indeks_aktif.kode_indeks }}</h1>
+            <p class="text-sm text-slate-500 font-medium mt-1">Tahun Anggaran Evaluasi: {{ indeks_aktif.tahun_berlaku }}</p>
+        </div>
+        
+        {% if request.user.profile.role.upper == 'OPERATOR' or request.user.profile.role.upper == 'SUPERADMIN' %}
+        <div>
+            {% if status_halaman == 'KOSONG' or status_halaman == 'DRAF' %}
+                {% if not komponen_list %}
+                    <button type="button" 
+                            disabled
+                            class="inline-flex items-center gap-2 px-6 py-3 bg-slate-100 text-slate-400 font-extrabold text-sm rounded-xl cursor-not-allowed border border-slate-200"
+                            title="Tidak dapat mengirim draf karena belum ada komponen evaluasi untuk periode ini.">
+                        <span>🔒</span> Kirim Semua ke Supervisor (Data Kosong)
+                    </button>
+                {% else %}
+                    <button type="button" 
+                            id="btnKirimKolektifHalaman"
+                            disabled
+                            onclick="handleKirimKolektif()" 
+                            class="inline-flex items-center gap-2 px-6 py-3 bg-slate-200 text-slate-400 font-extrabold text-sm rounded-xl cursor-not-allowed border border-slate-300"
+                            title="Semua indikator harus diisi terlebih dahulu sebelum dapat dikirim!">
+                        <span>🔒</span> Kirim Semua ke Supervisor (Belum Lengkap)
+                    </button>
+                {% endif %}
+            {% elif status_halaman == 'SUBMITTED' %}
+                <div class="inline-flex items-center gap-2.5 px-5 py-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-extrabold shadow-sm animate-pulse">
+                    <span class="text-base">⏳</span> Berkas Sedang Dalam Proses Verifikasi oleh Supervisor
+                </div>
+            {% elif status_halaman == 'VERIFIED' %}
+                <div class="inline-flex items-center gap-2.5 px-5 py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-extrabold shadow-sm">
+                    <span class="text-base">✅</span> Evaluasi Selesai: Seluruh Dokumen Telah Terverifikasi & Sah
+                </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ============================================================
+         BANNER NOTIFIKASI SINKRONISASI REAL-TIME (AJAX POLLING)
+         Tersembunyi secara default, muncul otomatis jika ada perubahan
+         ============================================================ -->
+    <div id="bannerSinkronisasi"
+         class="hidden items-center justify-between gap-4 px-5 py-4 bg-blue-50 border border-blue-200 rounded-2xl shadow-sm"
+         role="alert">
+        <div class="flex items-center gap-3">
+            <span class="text-xl animate-bounce">🔄</span>
+            <div>
+                <p class="text-sm font-bold text-blue-800">Ada Pembaruan Data!</p>
+                <p id="bannerSinkronisasiDetail" class="text-xs text-blue-600 font-medium mt-0.5">
+                    Rekan Operator Anda baru saja mengubah isian kuesioner ini.
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button"
+                    onclick="muatUlangHalaman()"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all">
+                🔃 Muat Ulang Sekarang
+            </button>
+            <button type="button"
+                    onclick="tutupBannerSinkronisasi()"
+                    class="px-3 py-2 bg-white hover:bg-slate-100 text-slate-500 font-bold text-xs rounded-xl border border-slate-200 transition-all">
+                Nanti
+            </button>
+        </div>
+    </div>
+
+    <!-- PROGRESS BAR PENGISIAN KUESIONER -->
+    {% if komponen_list and status_halaman != 'VERIFIED' %}
+    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-slate-700">Progress Pengisian</span>
+                <span id="progressBadge" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                    Memuat...
+                </span>
+            </div>
+            <span id="progressPersen" class="text-sm font-extrabold text-slate-900">0%</span>
+        </div>
+ 
+        <!-- Rel progress bar -->
+        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+            <div id="progressBar"
+                 class="h-3 rounded-full transition-all duration-700 ease-out"
+                 style="width: 0%; background-color: #94a3b8;">
+            </div>
+        </div>
+ 
+        <!-- Keterangan teks di bawah bar -->
+        <p id="progressKeterangan" class="text-xs text-slate-400 font-medium mt-2">
+            Menghitung indikator...
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- LOOP UTAMA -->
+    <div class="space-y-6">
+        {% for komponen in komponen_list %}
+            {% include "evaluasi/partials/node_komponen.html" with node=komponen level=1 %}
+        {% empty %}
+            <div class="p-8 text-center text-slate-400 bg-white border border-slate-200 rounded-2xl font-medium">
+                Belum ada data komponen evaluasi untuk periode ini.
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ========================================================================== -->
+<!-- MODAL DIALOG UNIVERSAL WITH USER LOGGER UPDATED MODE                       -->
+<!-- ========================================================================== -->
+<div id="indikatorModal" class="fixed inset-0 z-[99999] hidden bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-7xl w-full max-h-[92vh] flex flex-col overflow-hidden transform scale-95 transition-all duration-300">
+        
+        <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+            <div>
+                <h3 id="modalTitle" class="text-xl font-extrabold text-slate-900">Form Isi Indikator</h3>
+            </div>
+            <button type="button" onclick="closeIndikatorModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-semibold transition-colors">&times;</button>
+        </div>
+
+        <form id="modalForm" method="POST" class="flex flex-col flex-1 overflow-hidden">
+            {% csrf_token %}
+            <input type="hidden" name="indikator_id" id="modalIndikatorId">
+            
+            <div class="p-6 overflow-y-auto space-y-6 flex-1 bg-white">
+                <div>
+                    <h4 id="modalNamaIndikator" class="text-lg font-bold text-slate-900 leading-snug">Pertanyaan Indikator</h4>
+                    <div id="wrapperPenjelasan" class="mt-3 bg-slate-50 border border-slate-200/60 p-4 rounded-xl shadow-inner relative hidden">
+                        <!-- Kontainer teks dengan max-height default saat diringkas -->
+                        <pre id="modalPenjelasan" class="font-sans whitespace-pre-wrap text-xs text-slate-600 font-medium leading-relaxed text-left transition-all duration-300 max-h-[80px] overflow-hidden relative"></pre>
+                        
+                        <!-- Tombol Pemicu Buka/Tutup -->
+                        <button type="button" id="btnTogglePenjelasan" onclick="togglePenjelasan()" class="mt-2 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors">
+                            <span>👇 Lihat Selengkapnya</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ALERT BANNER NOTIFIKASI -->
+                <div id="modalAlertContainer"></div>
+                
+                <!-- BADGE INFORMASI OPERATOR PENGISI TERAKHIR -->
+                <div id="modalUserUpdatedContainer" class="mb-2"></div>
+                
+                <div class="space-y-3">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Pilihan Tingkat Kematangan / Level</label>
+                    <div id="modalJawabanContainer" 
+                         class="grid gap-4" 
+                         style="display: grid !important; 
+                                grid-auto-flow: column !important; 
+                                grid-template-rows: repeat(3, minmax(0, 1fr)) !important;
+                                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;">
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-4 border-t border-slate-100">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">🔗 URL Link Bukti Dukung (Cloud/GDrive)</label>
+                        <input type="url" name="link_bukti_dukung" id="modalLinkBukti" placeholder="https://drive.google.com/..." class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">💬 Catatan / Penjelasan OPD (Deskripsi Pendukung)</label>
+                        <textarea name="catatan_opd" id="modalCatatan" rows="5" placeholder="Tuliskan penjelasan atau narasi singkat yang mendeskripsikan keabsahan dokumen bukti dukung di atas..." class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-y min-h-[120px]"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-5 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+                <div>
+                    {% if request.user.profile.role.upper == 'OPERATOR' or request.user.profile.role.upper == 'SUPERADMIN' %}
+                    <button type="button" 
+                            id="modalBtnClear" 
+                            onclick="handleClearJawaban()"
+                            class="hidden px-5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition-colors">
+                        🗑️ Hapus Jawaban
+                    </button>
+                    {% endif %}
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeIndikatorModal()" class="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors">Batal</button>
+                    {% if request.user.profile.role.upper == 'OPERATOR' or request.user.profile.role.upper == 'SUPERADMIN' %}
+                        <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-600/10 transition-colors">
+                            💾 Simpan Draf
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ========================================================================== -->
+<!-- SCRIPT JAVASCRIPT                                                          -->
+<!-- ========================================================================== -->
+<script>
+    const dataIndikatorMap = {
+        {% for komponen in komponen_list %}
+
+            {# 2-level: indikator langsung di root komponen (Aspek → Indikator) #}
+            {% for ind in komponen.indikator_list.all %}
+                {% with jawaban=jawaban_map|dict_get:ind.id %}
+                    "{% if jawaban %}TX_{{ jawaban.id }}{% else %}IND_{{ ind.id }}{% endif %}": {
+                        "id_indikator_asli": "{{ ind.id }}",
+                        "nomor": "{{ ind.nomor_indikator }}",
+                        "nama": "{{ ind.nama_indikator|escapejs }}",
+                        "penjelasan": "{{ ind.penjelasan|default:''|escapejs }}",
+                        "tipe": "{{ ind.tipe_penilaian }}",
+                        "pilihan": [
+                            {% for pil in ind.pilihan_jawaban.all %}
+                            {
+                                "id": "{{ pil.id }}",
+                                "level": "{{ pil.label_level|escapejs }}",
+                                "skor": "{{ pil.nilai_angka }}",
+                                "narasi": "{{ pil.narasi_kriteria|escapejs }}"
+                            },
+                            {% endfor %}
+                        ],
+                        "jawaban_terpilih": "{{ jawaban.pilihan_mandiri_id|default:'' }}",
+                        "skor_terpilih": "{{ jawaban.pilihan_mandiri.nilai_angka|default:'' }}",
+                        "link_bukti": "{{ jawaban.link_bukti_dukung|default:''|escapejs }}",
+                        "catatan": "{{ jawaban.catatan_opd|default:''|escapejs }}",
+                        "status": "{{ jawaban.status|default:'DRAF' }}",
+                        "catatan_supervisor": "{{ jawaban.catatan_supervisor|default:''|escapejs }}",
+                        "user_updated": "{{ jawaban.user_updated_by.username|default:'' }}"
+                    },
+                {% endwith %}
+            {% endfor %}
+
+            {# 3-level: indikator di sub-komponen (Domain → Aspek → Indikator) #}
+            {% for aspek in komponen.sub_komponen.all %}
+                {% for ind in aspek.indikator_list.all %}
+                    {% with jawaban=jawaban_map|dict_get:ind.id %}
+                        "{% if jawaban %}TX_{{ jawaban.id }}{% else %}IND_{{ ind.id }}{% endif %}": {
+                            "id_indikator_asli": "{{ ind.id }}",
+                            "nomor": "{{ ind.nomor_indikator }}",
+                            "nama": "{{ ind.nama_indikator|escapejs }}",
+                            "penjelasan": "{{ ind.penjelasan|default:''|escapejs }}",
+                            "tipe": "{{ ind.tipe_penilaian }}",
+                            "pilihan": [
+                                {% for pil in ind.pilihan_jawaban.all %}
+                                {
+                                    "id": "{{ pil.id }}",
+                                    "level": "{{ pil.label_level|escapejs }}",
+                                    "skor": "{{ pil.nilai_angka }}",
+                                    "narasi": "{{ pil.narasi_kriteria|escapejs }}"
+                                },
+                                {% endfor %}
+                            ],
+                            "jawaban_terpilih": "{{ jawaban.pilihan_mandiri_id|default:'' }}",
+                            "skor_terpilih": "{{ jawaban.pilihan_mandiri.nilai_angka|default:'' }}",
+                            "link_bukti": "{{ jawaban.link_bukti_dukung|default:''|escapejs }}",
+                            "catatan": "{{ jawaban.catatan_opd|default:''|escapejs }}",
+                            "status": "{{ jawaban.status|default:'DRAF' }}",
+                            "catatan_supervisor": "{{ jawaban.catatan_supervisor|default:''|escapejs }}",
+                            "user_updated": "{{ jawaban.user_updated_by.username|default:'' }}"
+                        },
+                    {% endwith %}
+                {% endfor %}
+            {% endfor %}
+
+        {% endfor %}
+    };
+
+    const modalContainer = document.getElementById('indikatorModal');
+    let activeIndikatorId = null;   
+
+    function openIndikatorModal(mapKey) {
+        const item = dataIndikatorMap[mapKey];
+        if (!item) {
+            console.error("Map Key tidak ditemukan di dataIndikatorMap:", mapKey);
+            return;
+        }
+
+        let idAsli = item.id_indikator_asli;
+        if (!idAsli || idAsli === 'undefined') {
+            idAsli = mapKey.split('_')[1];
+        }
+
+        activeIndikatorId = idAsli; 
+        document.getElementById('modalIndikatorId').value = idAsli;
+        
+        const isLocked = item.status === 'SUBMITTED' || item.status === 'VERIFIED';
+
+        document.getElementById('modalTitle').innerText = `Indikator ${item.nomor} ${isLocked ? '(TERKUNCI - PROSES AUDIT)' : ''}`;
+        document.getElementById('modalNamaIndikator').innerText = item.nama;
+        
+        const alertContainer = document.getElementById('modalAlertContainer');
+        alertContainer.innerHTML = '';
+
+        // --------------------------------------------------------------------------
+        // LOGIKA SINKRONISASI: MENAMPILKAN DESKRIPSI / PENJELASAN INDIKATOR
+        // --------------------------------------------------------------------------
+        const wrapperPenjelasan = document.getElementById('wrapperPenjelasan');
+        const elementPenjelasan = document.getElementById('modalPenjelasan');
+        const btnToggle = document.getElementById('btnTogglePenjelasan');
+
+        if (item.penjelasan && item.penjelasan.trim() !== '') {
+            elementPenjelasan.innerText = item.penjelasan;
+            wrapperPenjelasan.classList.remove('hidden');
+            
+            // Kembalikan ke kondisi default (ringkas/collapse) setiap kali ganti indikator
+            elementPenjelasan.classList.add('max-h-[80px]', 'overflow-hidden');
+            btnToggle.innerHTML = '<span>👇 Lihat Selengkapnya</span>';
+            
+            // Deteksi otomatis: Jika teksnya pendek (tidak melebihi batas ringkas), sembunyikan tombol toggle
+            // Menggunakan setTimeout sedikit agar browser selesai merender tinggi text asli
+            setTimeout(() => {
+                if (elementPenjelasan.scrollHeight <= 85) {
+                    btnToggle.classList.add('hidden');
+                    elementPenjelasan.classList.remove('max-h-[80px]', 'overflow-hidden');
+                } else {
+                    btnToggle.classList.remove('hidden');
+                }
+            }, 50);
+
+        } else {
+            elementPenjelasan.innerText = '';
+            wrapperPenjelasan.classList.add('hidden');
+        }
+
+        // INFORMASI UNTUK MENAMPILKAN CATATAN SUPERVISOR
+        if (item.status === 'DRAF' && item.catatan_supervisor !== '') {
+            alertContainer.innerHTML = `
+                <div class="mb-5 bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-sm">
+                    <div class="flex items-start gap-3">
+                        <div class="text-rose-500 text-lg mt-0.5">⚠️</div>
+                        <div class="space-y-1">
+                            <h4 class="text-xs font-extrabold text-rose-800 uppercase tracking-wider">Catatan Revisi dari Supervisor:</h4>
+                            <p class="text-xs text-rose-700 font-medium leading-relaxed bg-white/60 p-2.5 rounded-lg border border-rose-100 mt-1.5 italic">
+                                "${item.catatan_supervisor}"
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (item.status === 'VERIFIED') {
+            let rekomendasiTeks = item.catatan_supervisor !== '' ? `<p class="text-[11px] text-emerald-600 mt-0.5 italic">Rekomendasi: "${item.catatan_supervisor}"</p>` : '';
+            alertContainer.innerHTML = `
+                <div class="mb-5 bg-emerald-50 border border-emerald-200 p-4 rounded-xl shadow-sm">
+                    <div class="flex items-center gap-3 text-emerald-800">
+                        <span class="text-lg">🎉</span>
+                        <div>
+                            <h4 class="text-xs font-bold uppercase tracking-wider">Instrumen Valid & Sah</h4>
+                            ${rekomendasiTeks}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // INJEKSI INFORMASI PERSONEL PENGISI TERAKHIR (BERKAS SINKRON)
+        const userUpdatedContainer = document.getElementById('modalUserUpdatedContainer');
+        userUpdatedContainer.innerHTML = '';
+        if (item.user_updated && item.user_updated.trim() !== '') {
+            userUpdatedContainer.innerHTML = `
+                <div class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 shadow-sm select-none">
+                    👤 Pengisi terakhir draf instansi: <span class="text-indigo-600 font-extrabold">@${item.user_updated}</span>
+                </div>
+            `;
+        }
+
+        const inputLink = document.getElementById('modalLinkBukti');
+        const inputCatatan = document.getElementById('modalCatatan');
+        
+        inputLink.value = item.link_bukti;
+        inputCatatan.value = item.catatan;
+        
+        inputLink.disabled = isLocked;
+        inputCatatan.disabled = isLocked;
+
+        const btnClear = document.getElementById('modalBtnClear');
+        if (btnClear) {
+            if (item.jawaban_terpilih && item.jawaban_terpilih !== "" && !isLocked) {
+                btnClear.classList.remove('hidden');
+            } else {
+                btnClear.classList.add('hidden');
+            }
+        }
+
+        const btnSubmit = document.querySelector('#modalForm button[type="submit"]');
+        if (btnSubmit) {
+            if (isLocked) {
+                btnSubmit.classList.add('hidden');
+            } else {
+                btnSubmit.classList.remove('hidden');
+            }
+        }
+
+        const jawabanContainer = document.getElementById('modalJawabanContainer');
+        jawabanContainer.innerHTML = '';
+
+        // -----------------------------------------------------------------------
+        // RENDER KONDISIONAL: INPUT_ANGKA vs BERJENJANG / BINER
+        // -----------------------------------------------------------------------
+        if (item.tipe === 'INPUT_ANGKA') {
+            // Tampilan input angka manual — tidak pakai radio button
+            jawabanContainer.style.cssText = 'display: block !important;';
+            const nilaiAwal = item.skor_terpilih || '';
+            jawabanContainer.innerHTML = `
+                <div class="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Nilai / Persentase
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <input type="number"
+                               name="nilai_angka_input"
+                               id="inputNilaiAngka"
+                               min="0" max="100" step="0.01"
+                               value="${nilaiAwal}"
+                               ${isLocked ? 'disabled' : ''}
+                               placeholder="Contoh: 75.50"
+                               class="w-48 px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800
+                                      focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all
+                                      ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}">
+                        <span class="text-sm text-slate-400 font-semibold">/ 100</span>
+                    </div>
+                    <p class="text-xs text-slate-400 font-medium">Masukkan nilai angka atau persentase (0–100) secara manual.</p>
+                </div>
+            `;
+        } else {
+            // Tampilan radio button untuk BERJENJANG / BINER
+            jawabanContainer.style.cssText = `display: grid !important;
+                grid-auto-flow: column !important;
+                grid-template-rows: repeat(3, minmax(0, 1fr)) !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;`;
+
+            item.pilihan.forEach(pil => {
+                const isChecked = item.jawaban_terpilih == pil.id;
+                const checkAttr = isChecked ? 'checked' : '';
+                const isDisabled = isLocked ? 'disabled' : '';
+
+                let boxStatusClass = "border-slate-200 bg-white hover:bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500/20";
+                let radioColorClass = "text-indigo-600 focus:ring-indigo-500/20";
+                let badgeColorClass = "text-indigo-600 bg-indigo-50 border-indigo-100";
+
+                if (isChecked) {
+                    if (item.status === 'VERIFIED') {
+                        boxStatusClass = "border-emerald-500 bg-emerald-50/40 ring-2 ring-emerald-500/30";
+                        radioColorClass = "text-emerald-600 focus:ring-emerald-500/20";
+                        badgeColorClass = "text-white bg-emerald-600 border-emerald-600";
+                    } else if (item.status === 'SUBMITTED') {
+                        boxStatusClass = "border-amber-500 bg-amber-50/40 ring-2 ring-amber-500/30";
+                        radioColorClass = "text-amber-600 focus:ring-amber-500/20";
+                        badgeColorClass = "text-white bg-amber-600 border-amber-600";
+                    } else {
+                        boxStatusClass = "border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-600/20 shadow-md";
+                        radioColorClass = "text-indigo-600 focus:ring-indigo-500/20";
+                        badgeColorClass = "text-white bg-indigo-600 border-indigo-600";
+                    }
+                } else if (isLocked) {
+                    boxStatusClass = "border-slate-100 bg-slate-50/60 opacity-60 cursor-not-allowed";
+                    badgeColorClass = "text-slate-400 bg-slate-100 border-slate-200";
+                }
+
+                jawabanContainer.innerHTML += `
+                    <label class="flex items-start gap-3.5 p-4 border rounded-xl cursor-pointer transition-all h-full shadow-sm relative group ${boxStatusClass} ${isLocked && !isChecked ? 'cursor-not-allowed' : ''}">
+                        <div class="flex items-center h-5 mt-0.5">
+                            <input type="radio"
+                                   name="pilihan_id"
+                                   value="${pil.id}"
+                                   ${checkAttr}
+                                   ${isDisabled}
+                                   required
+                                   class="h-4 w-4 border-slate-300 transition-colors ${radioColorClass} ${isLocked ? 'cursor-not-allowed' : ''}">
+                        </div>
+                        <div class="text-xs space-y-1 pr-2">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <strong class="text-slate-900 font-bold text-sm tracking-tight">${pil.level}</strong>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${badgeColorClass} transition-colors">
+                                    Skor: ${pil.skor}
+                                </span>
+                            </div>
+                            <p class="text-slate-500 leading-relaxed font-medium group-hover:text-slate-600 transition-colors pt-0.5">${pil.narasi}</p>
+                        </div>
+                    </label>
+                `;
+            });
+        }
+
+        modalContainer.classList.remove('hidden');
+    }
+
+    function handleClearJawaban() {
+        if (!activeIndikatorId) return;
+        
+        const item = Object.values(dataIndikatorMap).find(x => x.id_indikator_asli == activeIndikatorId);
+        const nomorIndikator = item ? item.nomor : '';
+        
+        Swal.fire({
+            title: `Hapus Jawaban Indikator ${nomorIndikator}?`,
+            text: "Tindakan ini akan mengosongkan nilai kematangan dan menghapus berkas bukti dukung yang telah disimpan.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444', 
+            cancelButtonColor: '#64748b',  
+            confirmButtonText: '🗑️ Ya, Hapus!',
+            cancelButtonText: 'Batal',
+            didOpen: () => {
+                const container = Swal.getContainer();
+                if (container) container.style.zIndex = '100000'; 
+            },
+            customClass: {
+                popup: 'rounded-2xl',
+                confirmButton: 'rounded-xl font-bold text-xs px-4 py-2',
+                cancelButton: 'rounded-xl font-semibold text-xs px-4 py-2'
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const virtualForm = document.createElement('form');
+                virtualForm.method = 'POST';
+                virtualForm.action = window.location.href;
+
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                virtualForm.appendChild(csrfInput);
+
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'clear_jawaban';
+                virtualForm.appendChild(actionInput);
+
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'indikator_id';
+                idInput.value = activeIndikatorId;
+                virtualForm.appendChild(idInput);
+
+                document.body.appendChild(virtualForm);
+                virtualForm.submit();
+            }
+        });
+    }
+
+    function closeIndikatorModal() {
+        modalContainer.classList.add('hidden');
+    }
+
+    modalContainer.addEventListener('click', function(e) {
+        if (e.target === modalContainer) e.preventDefault();
+    });
+
+    function handleKirimKolektif() {
+        Swal.fire({
+            title: '🚀 Kirim Seluruh Instrumen?',
+            text: 'Pastikan seluruh dokumen bukti dukung dan draf tingkat kematangan telah Anda isi dengan lengkap sebelum diserahkan ke Supervisor.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#2563eb', 
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Ya, Kirim Sekarang!',
+            cancelButtonText: 'Batal',
+            customClass: {
+                popup: 'rounded-2xl',
+                confirmButton: 'rounded-xl font-bold text-xs px-4 py-2',
+                cancelButton: 'rounded-xl font-semibold text-xs px-4 py-2'
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const globalForm = document.createElement('form');
+                globalForm.method = 'POST';
+                globalForm.action = window.location.href;
+
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                globalForm.appendChild(csrfInput);
+
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'submit_kuesioner_halaman';
+                globalForm.appendChild(actionInput);
+
+                document.body.appendChild(globalForm);
+                globalForm.submit();
+            }
+        });
+    }
+
+    function checkTombolKirimKolektifStatus() {
+        const btnKirim   = document.getElementById('btnKirimKolektifHalaman');
+        const bar        = document.getElementById('progressBar');
+        const badge      = document.getElementById('progressBadge');
+        const persen     = document.getElementById('progressPersen');
+        const keterangan = document.getElementById('progressKeterangan');
+ 
+        const listIndikator  = Object.values(dataIndikatorMap);
+        const totalIndikator = listIndikator.length;
+ 
+        // Hitung: terisi = punya jawaban terpilih
+        const terisiCount = listIndikator.filter(
+            item => item.jawaban_terpilih && item.jawaban_terpilih.trim() !== ""
+        ).length;
+ 
+        const sisaCount    = totalIndikator - terisiCount;
+        const persenAngka  = totalIndikator > 0
+            ? Math.round((terisiCount / totalIndikator) * 100)
+            : 0;
+ 
+        // -----------------------------------------------------------------------
+        // UPDATE VISUAL PROGRESS BAR
+        // -----------------------------------------------------------------------
+        if (bar && badge && persen && keterangan) {
+ 
+            // Lebar & warna bar berdasarkan persentase
+            bar.style.width = persenAngka + '%';
+ 
+            if (persenAngka === 100) {
+                bar.style.backgroundColor = '#10b981';   // emerald — semua terisi
+                badge.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200';
+                badge.textContent = '✅ Lengkap';
+                keterangan.textContent = 'Semua indikator sudah diisi. Dokumen siap dikirim ke Supervisor.';
+                keterangan.className = 'text-xs text-emerald-600 font-medium mt-2';
+            } else if (persenAngka >= 50) {
+                bar.style.backgroundColor = '#3b82f6';   // blue — setengah jalan
+                badge.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200';
+                badge.textContent = `${terisiCount} / ${totalIndikator} terisi`;
+                keterangan.textContent = `Hampir selesai — masih ada ${sisaCount} indikator yang belum diisi.`;
+                keterangan.className = 'text-xs text-blue-500 font-medium mt-2';
+            } else if (persenAngka > 0) {
+                bar.style.backgroundColor = '#f59e0b';   // amber — baru mulai
+                badge.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200';
+                badge.textContent = `${terisiCount} / ${totalIndikator} terisi`;
+                keterangan.textContent = `Baru ${terisiCount} dari ${totalIndikator} indikator diisi. Selesaikan ${sisaCount} indikator lagi.`;
+                keterangan.className = 'text-xs text-amber-500 font-medium mt-2';
+            } else {
+                bar.style.backgroundColor = '#94a3b8';   // slate — belum ada sama sekali
+                badge.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200';
+                badge.textContent = `0 / ${totalIndikator} terisi`;
+                keterangan.textContent = `Belum ada indikator yang diisi. Klik tombol indikator di bawah untuk mulai mengisi.`;
+                keterangan.className = 'text-xs text-slate-400 font-medium mt-2';
+            }
+ 
+            persen.textContent = persenAngka + '%';
+        }
+ 
+        // -----------------------------------------------------------------------
+        // UPDATE TOMBOL KIRIM (logika lama dipertahankan, label diperkaya angka)
+        // -----------------------------------------------------------------------
+        if (!btnKirim) return;
+ 
+        if (totalIndikator === 0) {
+            btnKirim.disabled = true;
+            return;
+        }
+ 
+        if (terisiCount >= totalIndikator) {
+            btnKirim.disabled = false;
+            btnKirim.className = "inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all transform hover:-translate-y-0.5";
+            btnKirim.innerHTML = "<span>🚀</span> Kirim Semua ke Supervisor";
+        } else {
+            btnKirim.disabled = true;
+            btnKirim.className = "inline-flex items-center gap-2 px-6 py-3 bg-slate-200 text-slate-400 font-extrabold text-sm rounded-xl cursor-not-allowed border border-slate-300";
+            btnKirim.innerHTML = `<span>🔒</span> Kirim ke Supervisor (${terisiCount}/${totalIndikator} terisi)`;
+        }
+    }
+ 
+    window.addEventListener('DOMContentLoaded', checkTombolKirimKolektifStatus);
+
+    // FUNGSI UTAS UNTUK BUKA TUTUP DESKRIPSI INDIKATOR
+    function togglePenjelasan() {
+        const elementPenjelasan = document.getElementById('modalPenjelasan');
+        const btnToggle = document.getElementById('btnTogglePenjelasan');
+        
+        // Cek apakah saat ini sedang dalam kondisi diringkas (memiliki class max-h-[80px])
+        if (elementPenjelasan.classList.contains('max-h-[80px]')) {
+            // AKSI BUKA: Lepas batasan tinggi agar teks keluar semua
+            elementPenjelasan.classList.remove('max-h-[80px]', 'overflow-hidden');
+            btnToggle.innerHTML = '<span>☝️ Sembunyikan Deskripsi</span>';
+        } else {
+            // AKSI TUTUP: Pasang kembali batasan tinggi
+            elementPenjelasan.classList.add('max-h-[80px]', 'overflow-hidden');
+            btnToggle.innerHTML = '<span>👇 Lihat Selengkapnya</span>';
+        }
+    }
+    
+    // ==========================================================================
+    // AJAX POLLING: DETEKSI PERUBAHAN DATA OLEH OPERATOR LAIN (TANPA PAKSA RELOAD)
+    // ==========================================================================
+
+    // Timestamp awal diambil dari server saat halaman pertama kali dimuat
+    // Format ISO 8601 — akan dibandingkan setiap siklus polling
+    let snapshotTsAwal = null;
+
+    // Durasi jeda antar polling (30 detik). Naikkan jika server perlu diringankan.
+    const POLL_INTERVAL_MS = 30 * 1000;
+
+    // Flag: apakah banner sudah ditampilkan? Cegah notifikasi dobel.
+    let bannerSudahMuncul = false;
+
+    // Endpoint polling — di-render oleh Django agar URL selalu sinkron
+    const POLL_URL = "{% url 'poll_kuesioner' indeks_aktif.kode_indeks %}";
+
+    /**
+     * Ambil snapshot pertama saat halaman selesai dimuat.
+     * Ini menjadi "baseline" perbandingan untuk polling berikutnya.
+     */
+    async function ambilSnapshotAwal() {
+        try {
+            const resp = await fetch(POLL_URL, {
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            snapshotTsAwal = data.latest_ts;   // Simpan baseline awal
+        } catch (_) {
+            // Diam-diam abaikan — jaringan belum siap saat pertama muat
+        }
+    }
+
+    /**
+     * Satu siklus polling: fetch endpoint → bandingkan timestamp.
+     * Jika berbeda dengan baseline → tampilkan banner.
+     */
+    async function jalankanSatuSiklusPoll() {
+        // Jika banner sudah muncul, tidak perlu polling lagi sampai user reload
+        if (bannerSudahMuncul) return;
+
+        try {
+            const resp = await fetch(POLL_URL, {
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!resp.ok) return;
+
+            const data = await resp.json();
+            const tsSekarang = data.latest_ts;
+
+            // Bandingkan: jika timestamp berubah dari baseline → ada perubahan
+            if (snapshotTsAwal !== null && tsSekarang !== snapshotTsAwal) {
+                tampilkanBannerSinkronisasi(data.terisi, data.total);
+                // Hentikan polling — tidak perlu terus melakukan pengecekan
+                bannerSudahMuncul = true;
+            }
+        } catch (_) {
+            // Diam-diam abaikan error jaringan — polling akan coba lagi di siklus berikutnya
+        }
+    }
+
+    /**
+     * Tampilkan banner notifikasi dengan detail jumlah isian terkini.
+     */
+    function tampilkanBannerSinkronisasi(terisi, total) {
+        const banner = document.getElementById('bannerSinkronisasi');
+        const detail = document.getElementById('bannerSinkronisasiDetail');
+
+        if (!banner) return;
+
+        if (detail && total > 0) {
+            detail.textContent =
+                `Rekan Operator Anda baru saja mengubah isian. ` +
+                `Data terkini: ${terisi} dari ${total} indikator telah terisi.`;
+        }
+
+        // Tampilkan banner dengan animasi fade-in ringan
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        banner.style.opacity = '0';
+        banner.style.transition = 'opacity 0.4s ease';
+        requestAnimationFrame(() => { banner.style.opacity = '1'; });
+    }
+
+    /**
+     * Simpan posisi scroll lalu reload — scroll akan dipulihkan otomatis
+     * oleh mekanisme sessionStorage yang sudah ada.
+     */
+    function muatUlangHalaman() {
+        const posisiScrollSekarang = window.scrollY || window.pageYOffset;
+        sessionStorage.setItem(SCROLL_STORAGE_KEY, posisiScrollSekarang);
+        window.location.reload();
+    }
+
+    /**
+     * Tutup banner tanpa reload — user memilih "Nanti".
+     * Polling tetap berhenti (bannerSudahMuncul = true) agar tidak spam.
+     */
+    function tutupBannerSinkronisasi() {
+        const banner = document.getElementById('bannerSinkronisasi');
+        if (!banner) return;
+        banner.style.opacity = '0';
+        setTimeout(() => {
+            banner.classList.add('hidden');
+            banner.classList.remove('flex');
+        }, 400);
+    }
+
+    // Mulai polling setelah DOM siap:
+    // 1. Ambil snapshot baseline terlebih dahulu
+    // 2. Baru jalankan interval polling periodik
+    document.addEventListener('DOMContentLoaded', async function() {
+        await ambilSnapshotAwal();
+        setInterval(jalankanSatuSiklusPoll, POLL_INTERVAL_MS);
+    });
+
+    // ==========================================================================
+    // MANAGEMENT SCROLL POSITION VIA SESSION STORAGE (ANTI-RELOAD TRICK)
+    // ==========================================================================
+    // Kunci unik berdasarkan Kode Indeks Aktif agar tidak bentrok dengan kuesioner lain
+    const SCROLL_STORAGE_KEY = "scroll_posisi_kuesioner_{{ indeks_aktif.kode_indeks }}";
+
+    // 1. SIMPAN POSISI SCROLL SEBELUM HALAMAN DI-RELOAD / SUBMIT FORM
+    window.addEventListener('beforeunload', function() {
+        // Ambil koordinat pixel vertikal saat ini
+        const posisiScrollSekarang = window.scrollY || window.pageYOffset;
+        sessionStorage.setItem(SCROLL_STORAGE_KEY, posisiScrollSekarang);
+    });
+
+    // Tambahan proteksi: tangkap semua submit form di halaman (termasuk modalForm)
+    document.addEventListener('submit', function() {
+        const posisiScrollSekarang = window.scrollY || window.pageYOffset;
+        sessionStorage.setItem(SCROLL_STORAGE_KEY, posisiScrollSekarang);
+    });
+
+    // 2. PULIHKAN POSISI SCROLL SETELAH DOM COMPONENT SELESAI DIMUAT
+    window.addEventListener('DOMContentLoaded', function() {
+        const posisiTersimpan = sessionStorage.getItem(SCROLL_STORAGE_KEY);
+        
+        if (posisiTersimpan !== null) {
+            // Gunakan setTimeout mikro (100ms) untuk memberikan waktu bagi browser
+            // dalam menyelesaikan render pohon DOM komponen & progress bar kuesioner.
+            setTimeout(function() {
+                window.scrollTo({
+                    top: parseInt(posisiTersimpan, 10),
+                    behavior: 'instant' // 'instant' agar layar langsung lompat tanpa efek smooth lambat
+                });
+                
+                // Setelah berhasil dipulihkan, hapus key agar jika user sengaja navigasi keluar menu,
+                // posisi scroll akan kembali reset ke paling atas halaman.
+                sessionStorage.removeItem(SCROLL_STORAGE_KEY);
+            }, 100);
+        }
+        
+        // Panggil juga fungsi status kirim kolektif bawaan yang sudah ada
+        if (typeof checkTombolKirimKolektifStatus === 'function') {
+            checkTombolKirimKolektifStatus();
+        }
+    });
+
+</script>
+{% endblock %}

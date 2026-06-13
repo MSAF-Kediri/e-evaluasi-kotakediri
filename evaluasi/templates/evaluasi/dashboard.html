@@ -1,0 +1,201 @@
+{% extends "evaluasi/base.html" %}
+
+{% block content %}
+<div class="max-w-[1200px] mx-auto space-y-6">
+
+    <!-- ======================================================================
+         HEADER SELAMAT DATANG
+    ====================================================================== -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Panel Pemantauan</p>
+                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">
+                    Selamat Datang, {{ request.user.profile.nama_lengkap }}
+                </h1>
+                <p class="text-sm text-slate-500 font-medium mt-1">
+                    Sistem Evaluasi Mandiri · Pemerintah Digital Kota Kediri
+                </p>
+            </div>
+            <!-- Badge Role -->
+            <div class="flex-shrink-0">
+                {% if user_role == 'SUPERADMIN' %}
+                    <span class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 text-xs font-extrabold">
+                        ⚙️ SUPERADMIN
+                    </span>
+                {% elif user_role == 'SUPERVISOR' %}
+                    <span class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-extrabold">
+                        🔍 SUPERVISOR
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold">
+                        ✍️ OPERATOR
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================================
+         KARTU STATISTIK — ditampilkan sesuai role
+    ====================================================================== -->
+
+    <!-- OPERATOR: Progres pengisian kuesioner OPD sendiri -->
+    {% if user_role == 'OPERATOR' %}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-slate-900">{{ stats.total|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Total Isian Tersimpan</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-amber-600">{{ stats.draf|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Masih Draf</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-blue-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-blue-600">{{ stats.submitted|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Diajukan ke Supervisor</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-emerald-600">{{ stats.verified|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Terverifikasi & Sah</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- SUPERVISOR: Ajuan masuk yang menunggu tindakan -->
+    {% if user_role == 'SUPERVISOR' %}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-amber-600">{{ stats.menunggu|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Ajuan Menunggu Review</p>
+            {% if stats.menunggu > 0 %}
+            <a href="{% url 'verifikasi_list' %}" class="inline-block mt-3 text-[11px] font-bold text-amber-700 hover:underline">
+                Tinjau Sekarang →
+            </a>
+            {% endif %}
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-emerald-600">{{ stats.diverifikasi|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Sudah Diverifikasi</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-slate-700">{{ stats.total_opd|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">OPD Aktif Mengisi</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- SUPERADMIN: Gambaran sistem secara keseluruhan -->
+    {% if user_role == 'SUPERADMIN' %}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-slate-900">{{ stats.total_opd|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">OPD Aktif Mengisi</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-amber-600">{{ stats.menunggu|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Ajuan Menunggu Verifikasi</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-emerald-600">{{ stats.diverifikasi|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Sudah Terverifikasi</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-violet-200 shadow-sm text-center">
+            <p class="text-3xl font-extrabold text-violet-600">{{ stats.total_user|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Pengguna Aktif</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ======================================================================
+         KONTEN BAWAH: PROFIL + AKSI CEPAT
+    ====================================================================== -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Kartu Profil Pegawai -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Profil Pegawai</h3>
+            <table class="w-full text-sm">
+                <tbody class="divide-y divide-slate-100">
+                    <tr>
+                        <td class="py-2.5 text-slate-500 font-medium w-32">NIP</td>
+                        <td class="py-2.5 font-semibold text-slate-800 text-right">{{ request.user.profile.nip }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-2.5 text-slate-500 font-medium">Instansi</td>
+                        <td class="py-2.5 font-semibold text-slate-800 text-right">{{ request.user.profile.opd|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-2.5 text-slate-500 font-medium">Jabatan</td>
+                        <td class="py-2.5 font-semibold text-slate-800 text-right">{{ request.user.profile.jabatan }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-2.5 text-slate-500 font-medium">Jenis Kelamin</td>
+                        <td class="py-2.5 font-semibold text-slate-800 text-right">{{ request.user.profile.get_jenis_kelamin_display|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-2.5 text-slate-500 font-medium">Hak Akses</td>
+                        <td class="py-2.5 text-right">
+                            <span class="font-bold text-indigo-600">{{ request.user.profile.get_role_display }}</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Kartu Aksi Cepat -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Aksi Cepat</h3>
+
+            <!-- Shortcut ke Kuesioner (Operator & Superadmin) -->
+            {% if user_role == 'OPERATOR' or user_role == 'SUPERADMIN' %}
+                {% for indeks in stats.indeks_aktif %}
+                <a href="{% url 'kuesioner_isi' indeks.kode_indeks %}"
+                   class="flex items-center justify-between px-4 py-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all group">
+                    <div>
+                        <p class="text-sm font-bold text-indigo-700">✍️ Isi Kuesioner {{ indeks.kode_indeks }}</p>
+                        <p class="text-[11px] text-indigo-500 font-medium">Tahun {{ indeks.tahun_berlaku }}</p>
+                    </div>
+                    <span class="text-indigo-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
+                </a>
+                {% empty %}
+                <div class="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-400 font-medium">
+                    Belum ada instrumen evaluasi yang ditugaskan.
+                </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- Shortcut ke Verifikasi (Supervisor & Superadmin) -->
+            {% if user_role == 'SUPERVISOR' or user_role == 'SUPERADMIN' %}
+            <a href="{% url 'verifikasi_list' %}"
+               class="flex items-center justify-between px-4 py-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all group">
+                <div>
+                    <p class="text-sm font-bold text-amber-700">🔍 Daftar Ajuan Verifikasi</p>
+                    <p class="text-[11px] text-amber-500 font-medium">Tinjau instrumen yang menunggu persetujuan</p>
+                </div>
+                <span class="text-amber-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
+            </a>
+            {% endif %}
+
+            <!-- Shortcut ke Admin (Superadmin saja) -->
+            {% if user_role == 'SUPERADMIN' %}
+            <a href="/admin/" target="_blank"
+               class="flex items-center justify-between px-4 py-3 bg-slate-800 hover:bg-slate-900 rounded-xl transition-all group">
+                <p class="text-sm font-bold text-white">⚙️ Panel Konfigurasi Django Admin</p>
+                <span class="text-slate-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
+            </a>
+            {% endif %}
+
+            <!-- Tombol Ganti Password — selalu tampil -->
+            <button onclick="document.getElementById('modalPassword').style.display='flex'"
+                    class="flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all group w-full text-left mt-auto cursor-pointer">
+                <p class="text-sm font-bold text-slate-700">🔒 Keamanan & Ganti Password</p>
+                <span class="text-slate-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+{% include "evaluasi/partials/modal_password.html" %}
+{% endblock %}

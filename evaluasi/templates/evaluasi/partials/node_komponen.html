@@ -1,0 +1,72 @@
+{% load evaluasi_filters %}
+<!-- Kontainer Dinamis: Level 1 (Domain) berupa kotak besar putih, Level di bawahnya berupa kotak abu-abu di dalam -->
+<div class="w-full {% if level == 1 %}border border-slate-200 rounded-2xl p-6 bg-white shadow-sm space-y-4 mb-6{% else %}border border-slate-200 rounded-xl p-5 bg-slate-50 flex-1 flex flex-col justify-between{% endif %}">
+    
+    <div>
+        <!-- Judul Komponen (Otomatis Menyesuaikan Nama dari Database) -->
+        <h2 class="{% if level == 1 %}text-lg font-bold text-slate-800{% else %}text-sm font-semibold text-slate-700 mb-4{% endif %} flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide uppercase {% if level == 1 %}bg-slate-100 text-slate-700 border border-slate-200{% else %}bg-indigo-50 text-indigo-700 border border-indigo-100{% endif %}">
+                {#  {{ node.get_tipe_display }}  #}
+            </span>
+            <span>{{ node.kode_komponen }} - {{ node.nama_komponen }}</span>
+        </h2>
+
+        <!-- JIKA MEMILIKI SUB-KOMPONEN (Anak Komponen di Dalamnya) -->
+        {% if node.sub_komponen.all %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mt-4">
+                {% for sub_node in node.sub_komponen.all %}
+                    <!-- Memanggil dirinya sendiri secara rekursif untuk merender level di bawahnya -->
+                    {% include "evaluasi/partials/node_komponen.html" with node=sub_node level=level|add:1 %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- JIKA MAKSIMAL/DAUN: Memuat Tombol-Tombol Indikator di Level Terbawah (URUTAN FIX MENGGUNAKAN DICTSORT) -->
+    {% if node.indikator_list.all %}
+        <div class="flex flex-wrap gap-2.5 mt-4">
+            {% for indikator in node.indikator_list.all|dictsort:"nomor_indikator" %}
+                
+                <!-- Ambil objek transaksi jawaban spesifik dari map berdasarkan ID indikator -->
+                {% with jawaban=jawaban_map|dict_get:indikator.id %}
+                    
+                    {% if jawaban %}
+                        {% if jawaban.status == 'DRAF' %}
+                            <!-- KONDISI A: SUDAH ADA DATA TAPI STATUSNYA DRAF (WARNA BIRU / KUNING ELEGAN) -->
+                            <button type="button" 
+                                    onclick="openIndikatorModal('TX_{{ jawaban.id }}')"
+                                    id="btn-ind-{{ indikator.id }}"
+                                    class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 hover:border-indigo-300 rounded-xl font-bold text-xs transition-all shadow-sm flex items-center gap-2 group">
+                                <span class="w-2 h-2 rounded-full bg-indigo-500 shadow shadow-indigo-500/50 group-hover:scale-125 transition-transform"></span>
+                                <span>Indikator {{ indikator.nomor_indikator }}</span>
+                                <span class="text-[10px] bg-indigo-200/60 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-tighter">📝 Draf</span>
+                            </button>
+                        {% else %}
+                            <!-- KONDISI B: STATUS SUBMITTED ATAU VERIFIED (WARNA HIJAU EMERALD PREMIUM) -->
+                            <button type="button" 
+                                    onclick="openIndikatorModal('TX_{{ jawaban.id }}')"
+                                    id="btn-ind-{{ indikator.id }}"
+                                    class="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 rounded-xl font-bold text-xs transition-all shadow-sm flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 shadow shadow-emerald-500/50"></span>
+                                <span>Indikator {{ indikator.nomor_indikator }}</span>
+                                <span class="text-[10px] bg-emerald-200/60 px-1.5 py-0.5 rounded-md font-bold">
+                                    {% if jawaban.status == 'VERIFIED' %}✅ Sah{% else %}✓ Terisi{% endif %}
+                                </span>
+                            </button>
+                        {% endif %}
+                    {% else %}
+                        <!-- KONDISI C: BELUM ADA TRANSAKSI SAMA SEKALI (WARNA ABU-ABU STANDAR) -->
+                        <button type="button" 
+                                onclick="openIndikatorModal('IND_{{ indikator.id }}')"
+                                id="btn-ind-{{ indikator.id }}"
+                                class="px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-800 border border-slate-200 hover:border-slate-400 rounded-xl font-medium text-xs transition-all shadow-sm flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+                            <span>Indikator {{ indikator.nomor_indikator }}</span>
+                        </button>
+                    {% endif %}
+
+                {% endwith %}
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
