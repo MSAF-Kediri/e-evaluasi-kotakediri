@@ -409,7 +409,7 @@
             jawabanContainer.innerHTML = `
                 <div class="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Nilai / Persentase
+                        Nilai
                     </label>
                     <div class="flex items-center gap-3">
                         <input type="number"
@@ -418,13 +418,12 @@
                                min="0" max="100" step="0.01"
                                value="${nilaiAwal}"
                                ${isLocked ? 'disabled' : ''}
-                               placeholder="Contoh: 75.50"
+                               placeholder="Contoh: 2.5"
                                class="w-48 px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800
                                       focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all
                                       ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}">
-                        <span class="text-sm text-slate-400 font-semibold">/ 100</span>
                     </div>
-                    <p class="text-xs text-slate-400 font-medium">Masukkan nilai angka atau persentase (0–100) secara manual.</p>
+                    <p class="text-xs text-slate-400 font-medium">Masukkan nilai angka (0–100) secara manual.</p>
                 </div>
             `;
         } else {

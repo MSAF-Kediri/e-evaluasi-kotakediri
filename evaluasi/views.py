@@ -635,27 +635,45 @@ def verifikasi_list_view(request):
         semua_indeks = JenisIndeks.objects.all().order_by('kode_indeks')
     else:
         semua_indeks = user_profile.indeks_akses.all().order_by('kode_indeks')
- 
+    
     indeks_terpilih = request.GET.get("indeks", "")
- 
-    # Ambil data usulan menggunakan select_related ke relasi opd langsung
+    
+    # ---- QUEUE: Menunggu Verifikasi (status SUBMITTED) ----
     query_ajuan = TransaksiEvaluasi.objects.filter(status="SUBMITTED").select_related(
         "indeks_aktif", "indikator", "pilihan_mandiri", "opd"
     ).prefetch_related("indikator__pilihan_jawaban")
- 
-    # Batasi daftar ajuan masuk hanya untuk rumpun indeks yang diizinkan bagi Supervisor tersebut
+    
     if user_role != "SUPERADMIN":
         query_ajuan = query_ajuan.filter(indeks_aktif__in=user_profile.indeks_akses.all())
- 
+    
     if indeks_terpilih and indeks_terpilih != "all":
         query_ajuan = query_ajuan.filter(indeks_aktif_id=indeks_terpilih)
- 
+    
     daftar_ajuan = query_ajuan.order_by("indikator__nomor_indikator")
- 
+    
+    # ---- RIWAYAT: Sudah Disahkan (VERIFIED) + Pernah Ditolak (DRAF + ada catatan supervisor) ----
+    query_riwayat = TransaksiEvaluasi.objects.filter(
+        Q(status="VERIFIED") |
+        Q(status="DRAF", catatan_supervisor__isnull=False)
+    ).exclude(
+        catatan_supervisor=""
+    ).select_related(
+        "indeks_aktif", "indikator", "pilihan_mandiri", "pilihan_verifikasi", "opd", "user_updated_by"
+    )
+    
+    if user_role != "SUPERADMIN":
+        query_riwayat = query_riwayat.filter(indeks_aktif__in=user_profile.indeks_akses.all())
+    
+    if indeks_terpilih and indeks_terpilih != "all":
+        query_riwayat = query_riwayat.filter(indeks_aktif_id=indeks_terpilih)
+    
+    daftar_riwayat = query_riwayat.order_by("-updated_at")  # Terbaru dulu
+    
     context = {
-        "semua_indeks": semua_indeks,
+        "semua_indeks":    semua_indeks,
         "indeks_terpilih": indeks_terpilih,
-        "daftar_ajuan": daftar_ajuan,
+        "daftar_ajuan":    daftar_ajuan,
+        "daftar_riwayat":  daftar_riwayat,   # ← BARU
     }
     return render(request, "evaluasi/verifikasi_list.html", context)
 

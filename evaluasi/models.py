@@ -204,6 +204,7 @@ class KomponenEvaluasi(models.Model):
 
     class Meta:
         verbose_name_plural = "2. Bank Struktur Komponen"
+        ordering = ["kode_komponen"]
 
 
 # ==============================================================================

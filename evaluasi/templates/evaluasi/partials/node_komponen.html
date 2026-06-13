@@ -15,8 +15,10 @@
         {% if node.sub_komponen.all %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mt-4">
                 {% for sub_node in node.sub_komponen.all %}
-                    <!-- Memanggil dirinya sendiri secara rekursif untuk merender level di bawahnya -->
-                    {% include "evaluasi/partials/node_komponen.html" with node=sub_node level=level|add:1 %}
+                    {# ✅ Hanya render aspek yang punya indikator terfilter #}
+                    {% if sub_node.indikator_list.all %}
+                        {% include "evaluasi/partials/node_komponen.html" with node=sub_node level=level|add:1 %}
+                    {% endif %}
                 {% endfor %}
             </div>
         {% endif %}
