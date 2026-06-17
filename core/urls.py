@@ -19,7 +19,7 @@ from django.urls import path, include
 from django.views.generic.base import RedirectView
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('tim-internal-evaluasi/', admin.site.urls),
 
     path('favicon.ico', RedirectView.as_view(url='/static/evaluasi/Logo_Kota_Kediri.png')),
 

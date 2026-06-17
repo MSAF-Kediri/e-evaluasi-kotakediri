@@ -199,15 +199,13 @@ def dashboard_view(request):
     stats = {}
  
     if user_role == "OPERATOR" and user_profile and user_profile.opd:
-        user_opd = user_profile.opd
- 
-        total  = TransaksiEvaluasi.objects.filter(opd=user_opd).count()
-        draf   = TransaksiEvaluasi.objects.filter(opd=user_opd, status="DRAF").count()
-        submit = TransaksiEvaluasi.objects.filter(opd=user_opd, status="SUBMITTED").count()
-        verify = TransaksiEvaluasi.objects.filter(opd=user_opd, status="VERIFIED").count()
- 
-        # Indeks aktif yang bisa diakses operator ini
+        # Stats berdasarkan indeks yang bisa diakses operator ini
         indeks_aktif = user_profile.indeks_akses.all()
+
+        total  = TransaksiEvaluasi.objects.filter(indeks_aktif__in=indeks_aktif).count()
+        draf   = TransaksiEvaluasi.objects.filter(indeks_aktif__in=indeks_aktif, status="DRAF").count()
+        submit = TransaksiEvaluasi.objects.filter(indeks_aktif__in=indeks_aktif, status="SUBMITTED").count()
+        verify = TransaksiEvaluasi.objects.filter(indeks_aktif__in=indeks_aktif, status="VERIFIED").count()
  
         stats = {
             "total":        total,
@@ -218,7 +216,6 @@ def dashboard_view(request):
         }
  
     elif user_role == "SUPERVISOR":
-        # Hanya ajuan pada indeks yang ditugaskan ke supervisor ini
         indeks_akses = user_profile.indeks_akses.all()
  
         menunggu  = TransaksiEvaluasi.objects.filter(
@@ -227,25 +224,26 @@ def dashboard_view(request):
         diverif   = TransaksiEvaluasi.objects.filter(
             status="VERIFIED", indeks_aktif__in=indeks_akses
         ).count()
-        total_opd = TransaksiEvaluasi.objects.filter(
+        # Hitung indeks yang sedang aktif diisi (ada transaksi)
+        total_indeks_aktif = TransaksiEvaluasi.objects.filter(
             indeks_aktif__in=indeks_akses
-        ).values("opd").distinct().count()
+        ).values("indeks_aktif").distinct().count()
  
         stats = {
-            "menunggu":   menunggu,
-            "diverifikasi": diverif,
-            "total_opd":  total_opd,
-            "indeks_akses": indeks_akses,
+            "menunggu":        menunggu,
+            "diverifikasi":    diverif,
+            "total_opd":       total_indeks_aktif,  # label di template tetap bisa dipakai
+            "indeks_akses":    indeks_akses,
         }
  
     elif user_role == "SUPERADMIN":
-        total_opd    = TransaksiEvaluasi.objects.values("opd").distinct().count()
         total_submit = TransaksiEvaluasi.objects.filter(status="SUBMITTED").count()
         total_verify = TransaksiEvaluasi.objects.filter(status="VERIFIED").count()
         total_user   = ProfileUser.objects.filter(is_active_sw=True).count()
+        total_indeks = JenisIndeks.objects.count()
  
         stats = {
-            "total_opd":    total_opd,
+            "total_opd":    total_indeks,   # reuse slot — tampilkan jumlah indeks aktif
             "menunggu":     total_submit,
             "diverifikasi": total_verify,
             "total_user":   total_user,
@@ -347,29 +345,26 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
         # AKSI A: SUBMIT KOLEKTIF SATU HALAMAN (BENTENG BAJA ANTI-BYPASS SERVER)
         # ----------------------------------------------------------------------
         if action == "submit_kuesioner_halaman":
-            # Perhitungan total indikator wajib riil berdasarkan ID instansi
             total_indikator_count = len(indikator_ids)
             
-            # KORIDOR BARU: Hitung transaksi murni yang melekat pada institusi/OPD
+            # Validasi: hitung transaksi kolektif yang sudah terisi untuk indeks ini
             real_terisi_count = TransaksiEvaluasi.objects.filter(
                 indeks_aktif=indeks_aktif,
                 indikator_id__in=indikator_ids,
-                opd=user_opd, # Mengunci validasi database per OPD instansi
                 pilihan_mandiri__isnull=False
             ).count()
             
             if real_terisi_count < total_indikator_count:
                 messages.error(
                     request, 
-                    f"🚨 AKSES DITOLAK! Terdeteksi manipulasi pengiriman dokumen. "
-                    f"Baru {real_terisi_count} dari {total_indikator_count} indikator yang diisi oleh OPD Anda. "
-                    f"Silakan lengkapi sisa indikator terlebih dahulu!"
+                    f"🚨 Belum semua indikator diisi! "
+                    f"Baru {real_terisi_count} dari {total_indikator_count} indikator yang terisi. "
+                    f"Silakan lengkapi terlebih dahulu!"
                 )
                 return redirect("kuesioner_isi", kode_indeks=kode_indeks)
             
-            # Jika lolos validasi, set status seluruh record milik OPD ini menjadi SUBMITTED
+            # Submit: ubah status semua transaksi indeks ini ke SUBMITTED
             TransaksiEvaluasi.objects.filter(
-                opd=user_opd, 
                 indeks_aktif=indeks_aktif, 
                 indikator_id__in=indikator_ids,
                 status="DRAF"
@@ -383,7 +378,7 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
 
             messages.success(
                 request,
-                "🚀 Sukses! Seluruh instrumen kuesioner instansi Anda berhasil dikirim ke Supervisor.",
+                "🚀 Sukses! Seluruh instrumen kuesioner berhasil dikirim ke Supervisor.",
             )
             return redirect("kuesioner_isi", kode_indeks=kode_indeks)
 
@@ -400,7 +395,7 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
         # ----------------------------------------------------------------------
         if action == "clear_jawaban":
             TransaksiEvaluasi.objects.filter(
-                opd=user_opd, indeks_aktif=indeks_aktif, indikator=indikator
+                indeks_aktif=indeks_aktif, indikator=indikator
             ).delete()
 
             catat_aktivitas(
@@ -411,7 +406,7 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
 
             messages.success(
                 request,
-                f"🗑️ Jawaban untuk Indikator {indikator.nomor_indikator} dikosongkan untuk instansi Anda.",
+                f"🗑️ Jawaban Indikator {indikator.nomor_indikator} berhasil dikosongkan.",
             )
             return redirect("kuesioner_isi", kode_indeks=kode_indeks)
 
@@ -439,21 +434,20 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
         elif pilihan_id:
             pilihan = get_object_or_404(PilihanJawabanIndikator, id=pilihan_id)
 
-        # Proteksi Audit: Cek rekam data instansi saat ini apakah dikunci atau draf
+        # Proteksi: cek apakah transaksi kolektif sudah terkunci (SUBMITTED/VERIFIED)
         transaksi_lama = TransaksiEvaluasi.objects.filter(
-            opd=user_opd, indeks_aktif=indeks_aktif, indikator=indikator
+            indeks_aktif=indeks_aktif, indikator=indikator
         ).first()
 
         if transaksi_lama and transaksi_lama.status in ["SUBMITTED", "VERIFIED"]:
             messages.error(
                 request,
-                f"⛔ Gagal! Data Indikator {indikator.nomor_indikator} telah dikunci karena sedang dalam proses audit.",
+                f"⛔ Gagal! Indikator {indikator.nomor_indikator} sudah dikunci karena sedang dalam proses audit.",
             )
             return redirect("kuesioner_isi", kode_indeks=kode_indeks)
 
-        # Look up & simpan lembar kerja kolektif berbasis OPD
+        # Simpan jawaban kolektif — kunci pencarian hanya indeks + indikator
         transaksi, created = TransaksiEvaluasi.objects.update_or_create(
-            opd=user_opd, # Kunci utama pencarian di database beralih ke OPD instansi
             indeks_aktif=indeks_aktif,
             indikator=indikator,
             defaults={
@@ -461,7 +455,8 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
                 "link_bukti_dukung": link_bukti if link_bukti else None,
                 "catatan_opd": catatan if catatan else None,
                 "status": "DRAF",
-                "user_updated_by": request.user # Rekam personel terakhir yang memanipulasi draf
+                "opd_pengisi_terakhir": user_opd,   # audit trail: siapa OPD terakhir edit
+                "user_updated_by": request.user,     # audit trail: siapa user terakhir edit
             },
         )
 
@@ -487,18 +482,11 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
     # --------------------------------------------------------------------------
     # C. ALUR PENYAJIAN DATA KUESIONER (GET METHOD)
     # --------------------------------------------------------------------------
-    if user_role == "SUPERADMIN":
-        # Jalur Superadmin: Menampilkan seluruh rekam jejak transaksi secara terbuka
-        transaksi_query = TransaksiEvaluasi.objects.filter(indeks_aktif=indeks_aktif)
-    else:
-        # Jalur Operator: Wajib menyaring isian bersama milik OPD instansinya sendiri
-        transaksi_query = TransaksiEvaluasi.objects.filter(
-            opd=user_opd, indeks_aktif=indeks_aktif
-        )
+    # Kolaboratif: semua role lihat transaksi yang sama (satu set per indeks)
+    transaksi_query = TransaksiEvaluasi.objects.filter(indeks_aktif=indeks_aktif)
 
-    # Optimasi query dengan select_related langsung ke relasi master utama
     transaksi_user = transaksi_query.select_related(
-        "pilihan_mandiri", "opd"
+        "pilihan_mandiri", "opd_pengisi_terakhir"
     )
 
     # Petakan ke Python dictionary untuk kelancaran looping rendering template
@@ -603,11 +591,11 @@ def verifikasi_list_view(request):
             transaksi.save()
             catat_aktivitas(
                 request, "APPROVE",
-                deskripsi=f"Approve Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd.nama_opd} — {transaksi.indeks_aktif.kode_indeks}",
+                deskripsi=f"Approve Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd_pengisi_terakhir.nama_opd} — {transaksi.indeks_aktif.kode_indeks}",
                 indeks=transaksi.indeks_aktif,
-                opd=transaksi.opd,
+                opd=transaksi.opd_pengisi_terakhir,
             )
-            messages.success(request, f"✅ Sukses memverifikasi Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd.nama_opd}.")
+            messages.success(request, f"✅ Sukses memverifikasi Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd_pengisi_terakhir.nama_opd}.")
  
         elif action == "reject":
             transaksi.status = "DRAF"
@@ -615,11 +603,11 @@ def verifikasi_list_view(request):
             transaksi.save()
             catat_aktivitas(
                 request, "REJECT",
-                deskripsi=f"Tolak Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd.nama_opd} — Alasan: {catatan_supervisor[:80]}",
+                deskripsi=f"Tolak Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd_pengisi_terakhir.nama_opd} — Alasan: {catatan_supervisor[:80]}",
                 indeks=transaksi.indeks_aktif,
-                opd=transaksi.opd,
+                opd=transaksi.opd_pengisi_terakhir,
             )
-            messages.warning(request, f"❌ Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd.nama_opd} dikembalikan ke draf untuk revisi.")
+            messages.warning(request, f"❌ Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd_pengisi_terakhir.nama_opd} dikembalikan ke draf untuk revisi.")
  
         indeks_terpilih = request.GET.get('indeks', '')
         if indeks_terpilih:
@@ -640,7 +628,7 @@ def verifikasi_list_view(request):
     
     # ---- QUEUE: Menunggu Verifikasi (status SUBMITTED) ----
     query_ajuan = TransaksiEvaluasi.objects.filter(status="SUBMITTED").select_related(
-        "indeks_aktif", "indikator", "pilihan_mandiri", "opd"
+        "indeks_aktif", "indikator", "pilihan_mandiri", "opd_pengisi_terakhir"
     ).prefetch_related("indikator__pilihan_jawaban")
     
     if user_role != "SUPERADMIN":
@@ -658,7 +646,7 @@ def verifikasi_list_view(request):
     ).exclude(
         catatan_supervisor=""
     ).select_related(
-        "indeks_aktif", "indikator", "pilihan_mandiri", "pilihan_verifikasi", "opd", "user_updated_by"
+        "indeks_aktif", "indikator", "pilihan_mandiri", "pilihan_verifikasi", "opd_pengisi_terakhir", "user_updated_by"
     )
     
     if user_role != "SUPERADMIN":
@@ -673,7 +661,7 @@ def verifikasi_list_view(request):
         "semua_indeks":    semua_indeks,
         "indeks_terpilih": indeks_terpilih,
         "daftar_ajuan":    daftar_ajuan,
-        "daftar_riwayat":  daftar_riwayat,   # ← BARU
+        "daftar_riwayat":  daftar_riwayat,  
     }
     return render(request, "evaluasi/verifikasi_list.html", context)
 
@@ -681,60 +669,52 @@ def verifikasi_list_view(request):
 # HASIL INDEKS VIEW — Dual Mode: Nilai Sementara vs Nilai Sah
 # ==============================================================================
 @login_required(login_url="login")
-@role_required(allowed_roles=["OPERATOR", "SUPERVISOR"])
+@role_required(allowed_roles=["SUPERADMIN", "SUPERVISOR", "OPERATOR"])
 def hasil_indeks_view(request, kode_indeks):
     indeks_aktif = get_object_or_404(JenisIndeks, kode_indeks=kode_indeks)
     user_profile = request.user.profile
     user_role = user_profile.role.upper()
 
+    semua_opd = None
+    opd_terpilih = None
+
     # Validasi akses indeks
     if user_role != "SUPERADMIN" and not user_profile.indeks_akses.filter(id=indeks_aktif.id).exists():
         messages.error(request, f"⛔ AKSES DITOLAK! Anda tidak terdaftar untuk indeks {kode_indeks}.")
         return redirect("dashboard")
+    
+    # Base filter kueri transaksi
+    filters = {"indeks_aktif": indeks_aktif}
 
-    # Tentukan OPD
-    if user_role == "OPERATOR":
-        opd_terpilih = user_profile.opd
-        semua_opd = None
-    else:
-        opd_id = request.GET.get("opd_id")
+    if user_role in ["SUPERADMIN", "SUPERVISOR"]:
         semua_opd = OPD.objects.filter(
-            hasil_evaluasi_opd__indeks_aktif=indeks_aktif
+            transaksi_diisi__indeks_aktif=indeks_aktif
         ).distinct().order_by("nama_opd")
-        opd_terpilih = get_object_or_404(OPD, id=opd_id) if opd_id else semua_opd.first()
+        
+        opd_id = request.GET.get("opd_id", "all")
+        if opd_id and opd_id != "all":
+            opd_terpilih = get_object_or_404(OPD, id=opd_id)
+            filters["opd_pengisi_terakhir"] = opd_terpilih 
+    else:
+        opd_terpilih = user_profile.opd
+        filters["opd_pengisi_terakhir"] = opd_terpilih # 
 
-    if not opd_terpilih:
-        return render(request, "evaluasi/hasil_indeks.html", {
-            "indeks_aktif": indeks_aktif,
-            "semua_opd": semua_opd,
-            "opd_terpilih": None,
-            "hasil": None,
-            "user_role": user_role,
-        })
-
-    # ==========================================================================
-    # AMBIL SEMUA TRANSAKSI OPD INI (semua status)
-    # ==========================================================================
-    semua_transaksi = TransaksiEvaluasi.objects.filter(
-        opd=opd_terpilih,
-        indeks_aktif=indeks_aktif,
-    ).select_related(
+    # Ambil data transaksi sesuai filter (Ganti "opd" menjadi "opd_pengisi_terakhir")
+    semua_transaksi = TransaksiEvaluasi.objects.filter(**filters).select_related(
         "indikator__komponen__parent",
         "pilihan_mandiri",
         "pilihan_verifikasi",
-    )
+        "opd_pengisi_terakhir"
+    ).order_by("indikator__nomor_indikator", "-updated_at")
 
-    # Bobot map: {indikator_id: bobot_nilai}
+    # Mapping bobot
     bobot_map = {
         b.indikator_id: b.bobot_nilai
         for b in BobotIndikatorPeriode.objects.filter(jenis_indeks=indeks_aktif)
     }
     total_indikator = len(bobot_map)
 
-    # ==========================================================================
-    # FUNGSI PEMBANGUN HIERARKI — dipakai untuk sementara & sah
-    # mode: 'sementara' pakai pilihan_mandiri, 'sah' pakai pilihan_verifikasi
-    # ==========================================================================
+    # Fungsi Pembangun Hierarki
     def bangun_hierarki(transaksi_qs, mode):
         hierarki = {}
         total_skor = Decimal("0")
@@ -742,12 +722,11 @@ def hasil_indeks_view(request, kode_indeks):
         jumlah_terisi = 0
 
         for tx in transaksi_qs:
-            # Pilih sumber nilai berdasarkan mode
             if mode == "sementara":
                 pilihan = tx.pilihan_mandiri
                 if not pilihan:
                     continue
-            else:  # sah
+            else: 
                 pilihan = tx.pilihan_verifikasi
                 if not pilihan or tx.status != "VERIFIED":
                     continue
@@ -755,7 +734,6 @@ def hasil_indeks_view(request, kode_indeks):
             indikator = tx.indikator
             aspek = indikator.komponen
             domain = aspek.parent
-
             bobot = bobot_map.get(indikator.id, Decimal("0"))
             skor = pilihan.nilai_angka
             nilai_terbobot = (skor * bobot) / Decimal("100")
@@ -782,16 +760,20 @@ def hasil_indeks_view(request, kode_indeks):
                     "total_nilai_terbobot": Decimal("0"),
                 }
 
+            # 🛠️ KOREKSI DI SINI: Ambil dari relasi field baru
+            opd_obj = tx.opd_pengisi_terakhir 
+
             hierarki[domain_key]["aspek_list"][aspek_key]["indikator_list"].append({
                 "nomor": indikator.nomor_indikator,
                 "nama": indikator.nama_indikator,
+                "nama_opd": opd_obj.nama_opd if opd_obj else "-",
+                "singkatan_opd": opd_obj.singkatan if opd_obj and opd_obj.singkatan else (opd_obj.nama_opd[:15] if opd_obj else "-"),
                 "label_level": pilihan.label_level,
                 "skor_mentah": skor,
                 "bobot": bobot,
                 "nilai_terbobot": round(nilai_terbobot, 4),
                 "status": tx.status,
                 "catatan_supervisor": tx.catatan_supervisor or "" if mode == "sah" else "",
-                # Untuk mode sementara: tampilkan juga apakah sudah diverifikasi
                 "sudah_verified": tx.status == "VERIFIED",
             })
 
@@ -803,7 +785,7 @@ def hasil_indeks_view(request, kode_indeks):
             total_bobot += bobot
             jumlah_terisi += 1
 
-        # Finalisasi nilai dan sorting
+        # Sorting data hierarki
         for d in hierarki.values():
             d["nilai_domain"] = round(d["total_nilai_terbobot"], 4)
             d["total_bobot"] = round(d["total_bobot"], 2)
@@ -825,19 +807,13 @@ def hasil_indeks_view(request, kode_indeks):
             "hierarki": hierarki_list,
         }
 
-    hasil_sementara = bangun_hierarki(semua_transaksi, "sementara")
-    hasil_sah = bangun_hierarki(semua_transaksi, "sah")
-
-    # Tab aktif: default 'sah', fallback ke 'sementara' jika belum ada yang verified
-    tab_aktif = request.GET.get("tab", "sah" if hasil_sah["jumlah_terisi"] > 0 else "sementara")
-
     context = {
         "indeks_aktif": indeks_aktif,
         "semua_opd": semua_opd,
         "opd_terpilih": opd_terpilih,
-        "hasil_sementara": hasil_sementara,
-        "hasil_sah": hasil_sah,
-        "tab_aktif": tab_aktif,
+        "hasil_sementara": bangun_hierarki(semua_transaksi, "sementara"),
+        "hasil_sah": bangun_hierarki(semua_transaksi, "sah"),
+        "tab_aktif": request.GET.get("tab", "sementara"),
         "user_role": user_role,
     }
     return render(request, "evaluasi/hasil_indeks.html", context)
@@ -856,10 +832,9 @@ def poll_kuesioner_view(request, kode_indeks):
     """
     indeks_aktif = get_object_or_404(JenisIndeks, kode_indeks=kode_indeks)
     user_profile = request.user.profile
-    user_role    = user_profile.role.upper()
     user_opd     = user_profile.opd
- 
-    # Gunakan logika filter yang sama persis dengan kuesioner_isi_view
+    user_role    = user_profile.role.upper()
+    
     if user_role == "SUPERADMIN":
         bobot_assigned = BobotIndikatorPeriode.objects.filter(
             jenis_indeks=indeks_aktif
@@ -875,17 +850,10 @@ def poll_kuesioner_view(request, kode_indeks):
  
     indikator_ids = list(bobot_assigned)
  
-    if user_role == "SUPERADMIN":
-        transaksi_qs = TransaksiEvaluasi.objects.filter(
-            indeks_aktif=indeks_aktif,
-            indikator_id__in=indikator_ids,
-        )
-    else:
-        transaksi_qs = TransaksiEvaluasi.objects.filter(
-            opd=user_opd,
-            indeks_aktif=indeks_aktif,
-            indikator_id__in=indikator_ids,
-        )
+    transaksi_qs = TransaksiEvaluasi.objects.filter(
+        indeks_aktif=indeks_aktif,
+        indikator_id__in=indikator_ids,
+    )
  
     # Ambil timestamp terbaru — satu query ringan dengan MAX aggregation
     hasil = transaksi_qs.aggregate(latest=Max("updated_at"))

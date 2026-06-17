@@ -29,6 +29,7 @@ class OPDAdmin(ImportExportModelAdmin):
     resource_classes = [OPDResource]
     list_display = ["kode_opd", "nama_opd", "singkatan"]
     search_fields = ["nama_opd", "kode_opd"]
+    list_per_page = 20
 
 
 # ==============================================================================
@@ -45,12 +46,14 @@ class ProfileUserAdmin(admin.ModelAdmin):
         "is_active_sw",
         "salah_login_count",
     )
+    list_per_page = 25
     search_fields = ("user__username", "nama_lengkap", "opd", "nip", "no_hp", "jabatan")
     list_filter = ("role", "jenis_kelamin", "opd")
     list_editable = ("is_active_sw", "role")
     
     # Widget dual-list box box untuk mempermudah memilih banyak indeks sekaligus
     filter_horizontal = ("indeks_akses",)
+
 
     def get_username(self, obj):
         return obj.user.username
@@ -73,6 +76,7 @@ class JenisIndeksAdmin(admin.ModelAdmin):
     list_display = ("kode_indeks", "nama_indeks", "tahun_berlaku")
     search_fields = ("kode_indeks", "nama_indeks")
     list_filter = ("tahun_berlaku",)
+    list_per_page = 25
     inlines = [BobotIndikatorInline]
 
 
@@ -84,7 +88,7 @@ class KomponenEvaluasiAdmin(admin.ModelAdmin):
     list_display = ("kode_komponen", "nama_komponen", "tipe", "parent")
     search_fields = ("kode_komponen", "nama_komponen")
     list_filter = ("tipe", "parent")
-
+    list_per_page = 25
 
 # ==============================================================================
 # 4. BANK INDIKATOR & PILIHAN JAWABAN LEVEL 1-5 ADMIN (PERBAIKAN FITUR FILTER)
@@ -107,6 +111,7 @@ class IndikatorEvaluasiAdmin(admin.ModelAdmin):
 
     # SOLUSI ALTERNATIF: Fokus menyaring berdasarkan tipe penilaian dan rumpun komponen
     list_filter = ("tipe_penilaian", "komponen")
+    list_per_page = 25
 
     inlines = [PilihanJawabanInline]
 
@@ -122,7 +127,7 @@ class IndikatorEvaluasiAdmin(admin.ModelAdmin):
 @admin.register(TransaksiEvaluasi)
 class TransaksiEvaluasiAdmin(admin.ModelAdmin):
     list_display = [
-        'opd', 
+        'opd_pengisi_terakhir', 
         'indeks_aktif', 
         'indikator', 
         'pilihan_mandiri', 
@@ -137,18 +142,19 @@ class TransaksiEvaluasiAdmin(admin.ModelAdmin):
         'indeks_aktif', 
         'status', 
         'pilihan_verifikasi',
-        'opd',              
+        'opd_pengisi_terakhir',              
         'created_at'
     ]
     
     search_fields = [
-        'opd__nama_opd', 
-        'opd__singkatan', 
+        'opd_pengisi_terakhir__nama_opd', 
+        'opd_pengisi_terakhir__singkatan', 
         'indikator__nama_indikator', 
         'indikator__nomor_indikator'
     ]
     
-    ordering = ['indeks_aktif', 'opd', 'indikator__nomor_indikator']
+    ordering = ['indeks_aktif', 'opd_pengisi_terakhir', 'indikator__nomor_indikator']
+    list_per_page = 30
 
 # ==============================================================================
 # 6. LOG AKTIVITAS PENGGUNA (READ-ONLY)
@@ -159,6 +165,7 @@ class LogEntryAdmin(admin.ModelAdmin):
     list_filter = ['action_flag', 'content_type']
     search_fields = ['user__username', 'object_repr']
     readonly_fields = [f.name for f in LogEntry._meta.fields]
+    list_per_page = 25
 
     def has_add_permission(self, request):
         return False

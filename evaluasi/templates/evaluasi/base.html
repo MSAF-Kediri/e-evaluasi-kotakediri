@@ -308,7 +308,7 @@
         resetIdleTimer();
  
         // Daftar event yang dianggap sebagai "pengguna masih aktif"
-        const aktifitasEvents = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
+        const aktivitasEvents = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
  
         // Throttle reset agar tidak dipanggil ratusan kali per detik saat scroll
         let throttleReset = null;
@@ -320,7 +320,7 @@
             }, 5000); // Cukup reset timer setiap 5 detik sekali saat aktif
         }
  
-        aktifitasEvents.forEach(function(eventName) {
+        aktivitasEvents.forEach(function(eventName) {
             document.addEventListener(eventName, handleActivity, { passive: true });
         });
     });

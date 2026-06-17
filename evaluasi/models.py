@@ -279,17 +279,17 @@ class TransaksiEvaluasi(models.Model):
         ("VERIFIED", "Selesai Diverifikasi"),
     ]
 
-    # KUNCI UTAMA 1: Ubah relasi dari User ke OPD agar lembar kerja dimiliki bersama oleh Instansi
-    opd = models.ForeignKey(
+    # AUDIT TRAIL: OPD terakhir yang mengisi — bukan kunci unik, hanya info siapa yang edit terakhir
+    opd_pengisi_terakhir = models.ForeignKey(
         OPD,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
-        related_name="hasil_evaluasi_opd",
-        verbose_name="Instansi / OPD Pengisi",
+        on_delete=models.SET_NULL,
+        related_name="transaksi_diisi",
+        verbose_name="OPD Pengisi Terakhir",
     )
 
-    # Kolom audit opsional: Mengetahui siapa personil/operator terakhir yang menyentuh draf ini
+    # Audit user: siapa personil terakhir yang menyentuh transaksi ini
     user_updated_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -299,7 +299,7 @@ class TransaksiEvaluasi(models.Model):
         verbose_name="Operator Pengubah Terakhir",
     )
 
-    # Menyimpan relasi ke JenisIndeks periode tahun berjalan
+    # Kunci periode evaluasi
     indeks_aktif = models.ForeignKey(
         JenisIndeks,
         on_delete=models.CASCADE,
@@ -319,8 +319,8 @@ class TransaksiEvaluasi(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="pilihan_opd",
-        verbose_name="Jawaban Mandiri",
+        related_name="pilihan_kolektif",
+        verbose_name="Jawaban Kolektif",
     )
     
     link_bukti_dukung = models.URLField(
@@ -331,7 +331,7 @@ class TransaksiEvaluasi(models.Model):
     )
     
     catatan_opd = models.TextField(
-        blank=True, null=True, verbose_name="Penjelasan/Catatan dari OPD"
+        blank=True, null=True, verbose_name="Penjelasan/Catatan OPD"
     )
 
     # Kolom Khusus Verifikator (Kominfo)
@@ -351,19 +351,20 @@ class TransaksiEvaluasi(models.Model):
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default="DRAF", # Koreksi typo dari "DRAFT" agar konsisten dengan pilihan status
+        default="DRAF",
         verbose_name="Status Dokumen",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        # KUNCI UTAMA 2: Satu OPD hanya boleh memiliki SATU data per indikator di setiap periode tahunan
-        unique_together = ("opd", "indeks_aktif", "indikator")
+        # KUNCI BARU: Satu indikator hanya boleh punya SATU jawaban per periode indeks (kolaboratif semua OPD)
+        unique_together = ("indeks_aktif", "indikator")
         verbose_name_plural = "Transaksi Evaluasi Mandiri"
 
     def __str__(self):
-        return f"{self.opd.singkatan or self.opd.nama_opd} - {self.indeks_aktif.kode_indeks} - Indikator {self.indikator.nomor_indikator} [{self.status}]"
+        opd_str = self.opd_pengisi_terakhir.singkatan or self.opd_pengisi_terakhir.nama_opd if self.opd_pengisi_terakhir else "—"
+        return f"{self.indeks_aktif.kode_indeks} - Indikator {self.indikator.nomor_indikator} [{self.status}] (last: {opd_str})"
 
 # ==============================================================================
 # 6. SIGNAL MANAGEMENT: SINGLE ACTIVE SESSION (RETAINED)
