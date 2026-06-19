@@ -135,7 +135,7 @@ class JenisIndeks(models.Model):
 
     class Meta:
         verbose_name_plural = "1. Master Jenis Indeks (Periode)"
-
+        ordering = ['-tahun_berlaku', 'kode_indeks']
 
 # ==============================================================================
 # TABEL BARU (JUNCTION): MENGUNCI BOBOT INDIKATOR PER PERIODE TAHUN EVALUASI
@@ -425,3 +425,41 @@ class ActivityLog(models.Model):
     def __str__(self):
         user_str = self.user.username if self.user else "?"
         return f"[{self.aksi}] {user_str} — {self.created_at.strftime('%d/%m/%Y %H:%M')}"
+    
+# ==============================================================================
+# 8. NOTIFIKASI IN-APP — PEMBERITAHUAN KE OPERATOR SAAT APPROVE / REJECT
+# ==============================================================================
+class Notifikasi(models.Model):
+    TIPE_CHOICES = [
+        ("APPROVE", "Indikator Disetujui"),
+        ("REJECT",  "Indikator Dikembalikan"),
+    ]
+ 
+    penerima = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name="notifikasi_masuk", verbose_name="Penerima",
+    )
+    tipe = models.CharField(max_length=20, choices=TIPE_CHOICES, verbose_name="Tipe Notifikasi")
+    judul = models.CharField(max_length=255, verbose_name="Judul Notifikasi")
+    pesan = models.TextField(verbose_name="Isi Pesan")
+ 
+    # Relasi ke transaksi terkait agar bisa deep-link langsung ke indikator
+    transaksi = models.ForeignKey(
+        "TransaksiEvaluasi", on_delete=models.CASCADE,
+        related_name="notifikasi_list", verbose_name="Transaksi Terkait",
+    )
+    indeks = models.ForeignKey(
+        JenisIndeks, on_delete=models.CASCADE,
+        related_name="notifikasi_list", verbose_name="Indeks Terkait",
+    )
+ 
+    sudah_dibaca = models.BooleanField(default=False, verbose_name="Sudah Dibaca")
+    created_at   = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        verbose_name        = "Notifikasi"
+        verbose_name_plural = "Notifikasi"
+        ordering            = ["-created_at"]
+ 
+    def __str__(self):
+        return f"[{self.tipe}] → {self.penerima.username}: {self.judul}"

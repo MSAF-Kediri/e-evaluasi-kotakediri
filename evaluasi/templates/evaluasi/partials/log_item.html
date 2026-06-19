@@ -15,12 +15,17 @@
                         {{ log.get_aksi_display }}
                     </span>
                     <!-- Username -->
+                    {% if user_role == 'SUPERADMIN' %}
                     <span class="text-xs font-bold text-slate-700">
                         @{% if log.user %}{{ log.user.username }}{% else %}sistem{% endif %}
                     </span>
+                    {% endif %}
                     {% if log.user and log.user.profile %}
-                        <span class="text-[10px] text-slate-400 font-medium">
-                            ({{ log.user.profile.get_role_display }})
+                        <span class="text-[10px] text-slate-700 font-medium">
+                            -{{ log.user.profile.get_role_display }}-
+                        </span>
+                        <span class="text-[11px] text-slate-700 font-extrabold">
+                            NIP: {{ log.user.profile.nip }}
                         </span>
                     {% endif %}
                 </div>

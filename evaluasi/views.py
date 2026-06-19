@@ -1,4 +1,5 @@
 import re
+from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -15,6 +16,7 @@ from evaluasi.models import (
     TransaksiEvaluasi,
     BobotIndikatorPeriode,
     ActivityLog,
+    Notifikasi,
 )
 from django.db.models import Q, Prefetch, Max
 from django.http import JsonResponse
@@ -85,6 +87,64 @@ def catat_aktivitas(request, aksi, deskripsi="", indeks=None, opd=None):
         )
     except Exception:
         pass  # Jangan biarkan error logging menghentikan proses utama
+
+# ==============================================================================
+# HELPER: KIRIM NOTIFIKASI KE OPERATOR SETELAH PROSES VERIFIKASI SUPERVISOR
+# ==============================================================================
+def kirim_notifikasi_ke_operator(transaksi, tipe_aksi):
+    """
+    Buat record Notifikasi untuk semua operator dari OPD pengisi transaksi ini.
+    tipe_aksi: 'APPROVE' atau 'REJECT'
+    Dipanggil setelah transaksi.save() di verifikasi_list_view.
+    """
+    try:
+        opd = transaksi.opd_pengisi_terakhir
+        if not opd:
+            return
+ 
+        # Cari semua user OPERATOR dari OPD yang sama
+        operator_list = User.objects.filter(
+            profile__role="OPERATOR",
+            profile__opd=opd,
+            profile__is_active_sw=True,
+        )
+ 
+        if tipe_aksi == "APPROVE":
+            judul = f"✅ Indikator {transaksi.indikator.nomor_indikator} Disetujui"
+            pesan = (
+                f"Indikator {transaksi.indikator.nomor_indikator} "
+                f"({transaksi.indikator.nama_indikator}) pada instrumen "
+                f"{transaksi.indeks_aktif.kode_indeks} telah diverifikasi dan dinyatakan SAH."
+            )
+            if transaksi.catatan_supervisor:
+                pesan += f"\n\nRekomendasi Supervisor: {transaksi.catatan_supervisor}"
+        else:  # REJECT
+            judul = f"❌ Indikator {transaksi.indikator.nomor_indikator} Dikembalikan"
+            pesan = (
+                f"Indikator {transaksi.indikator.nomor_indikator} "
+                f"({transaksi.indikator.nama_indikator}) pada instrumen "
+                f"{transaksi.indeks_aktif.kode_indeks} dikembalikan ke draf untuk direvisi."
+            )
+            if transaksi.catatan_supervisor:
+                pesan += f"\n\nAlasan Supervisor: {transaksi.catatan_supervisor}"
+ 
+        # Buat notifikasi untuk setiap operator — bulk_create untuk efisiensi
+        notif_list = [
+            Notifikasi(
+                penerima=operator,
+                tipe=tipe_aksi,
+                judul=judul,
+                pesan=pesan,
+                transaksi=transaksi,
+                indeks=transaksi.indeks_aktif,
+            )
+            for operator in operator_list
+        ]
+        if notif_list:
+            Notifikasi.objects.bulk_create(notif_list)
+ 
+    except Exception:
+        pass  # Jangan biarkan error notifikasi menghentikan proses utama
 
 # ==============================================================================
 # 2. PROSES LOGOUT, LOGIN, & DASHBOARD (RETAINED & AUDITED)
@@ -225,15 +285,14 @@ def dashboard_view(request):
             status="VERIFIED", indeks_aktif__in=indeks_akses
         ).count()
         # Hitung indeks yang sedang aktif diisi (ada transaksi)
-        total_indeks_aktif = TransaksiEvaluasi.objects.filter(
-            indeks_aktif__in=indeks_akses
-        ).values("indeks_aktif").distinct().count()
+        # total_indeks_aktif = TransaksiEvaluasi.objects.filter(
+        #     indeks_aktif__in=indeks_akses
+        # ).values("indeks_aktif").distinct().count()
  
         stats = {
-            "menunggu":        menunggu,
-            "diverifikasi":    diverif,
-            "total_opd":       total_indeks_aktif,  # label di template tetap bisa dipakai
-            "indeks_akses":    indeks_akses,
+            "menunggu": menunggu,
+            "diverifikasi": diverif,
+            "total_indeks_aktif": indeks_akses.count(),  # Total indeks yang bisa diaudit supervisor ini
         }
  
     elif user_role == "SUPERADMIN":
@@ -243,7 +302,7 @@ def dashboard_view(request):
         total_indeks = JenisIndeks.objects.count()
  
         stats = {
-            "total_opd":    total_indeks,   # reuse slot — tampilkan jumlah indeks aktif
+            "total_indeks_aktif":    total_indeks,   # reuse slot — tampilkan jumlah indeks aktif
             "menunggu":     total_submit,
             "diverifikasi": total_verify,
             "total_user":   total_user,
@@ -310,30 +369,57 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
         id__in=indikator_ids
     ).prefetch_related("pilihan_jawaban")
 
-    # Support 2-level (Aspek→Indikator) DAN 3-level (Domain→Aspek→Indikator)
-    komponen_list = (
-        KomponenEvaluasi.objects.filter(
-            parent=None,
-        )
-        .filter(
-            # 2-level: root langsung punya indikator
-            Q(indikator_list__id__in=indikator_ids) |
-            # 3-level: root punya sub yang punya indikator
-            Q(sub_komponen__indikator_list__id__in=indikator_ids)
-        )
-        .distinct()
-        .prefetch_related(
-            "sub_komponen__sub_komponen",
-            Prefetch(
-                "indikator_list",                   # 2-level: indikator langsung di root
-                queryset=indikator_terfilter
-            ),
-            Prefetch(
-                "sub_komponen__indikator_list",     # 3-level: indikator di sub-komponen
-                queryset=indikator_terfilter
-            ),
-        )
+    # ==============================================================================
+    # BANGUN TREE KOMPOSISI KOMPONEN + INDIKATOR SECARA REKURSIF
+    # ==============================================================================
+    # Ambil SEMUA komponen yang relevan sekaligus (1 query)
+    semua_komponen = KomponenEvaluasi.objects.filter(
+        indikator_list__id__in=indikator_ids
+    ).distinct().prefetch_related(
+        Prefetch("indikator_list", queryset=indikator_terfilter)
     )
+
+    # Kumpulkan semua ancestor ID agar tree tidak putus di tengah
+    ancestor_ids = set()
+    for komp in semua_komponen:
+        current = komp.parent
+        while current:
+            ancestor_ids.add(current.id)
+            current = current.parent
+
+    # Gabungkan: komponen berindikator + semua ancestornya
+    semua_ids = set(k.id for k in semua_komponen) | ancestor_ids
+    semua_node = KomponenEvaluasi.objects.filter(
+        id__in=semua_ids
+    ).prefetch_related(
+        Prefetch("indikator_list", queryset=indikator_terfilter),
+        "indikator_list__pilihan_jawaban",  # ← tambah ini
+    )
+
+    # Bangun tree di Python — O(n), tidak ada query tambahan
+    node_map = {n.id: n for n in semua_node}
+    for node in semua_node:
+        node.children = []  # inject attribute dinamis
+
+    for node in semua_node:
+        if node.parent_id and node.parent_id in node_map:
+            node_map[node.parent_id].children.append(node)
+
+    # Root = node tanpa parent
+    komponen_list = sorted(
+        [n for n in semua_node if n.parent_id is None],
+        key=lambda x: x.kode_komponen
+    )
+
+    # Sort children di tiap node
+    def sortchildren(node):
+        node.children.sort(key=lambda x: x.kode_komponen)
+        for child in node.children:
+            sortchildren(child)
+
+    for root in komponen_list:
+        sortchildren(root)
+    # END BANGUN TREE KOMPOSISI KOMPONEN + INDIKATOR SECARA REKURSIF
 
     # --------------------------------------------------------------------------
     # B. PROSES MANIPULASI DATA JAWABAN (POST METHOD)
@@ -494,6 +580,7 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
 
     # Evaluasi status lembar kerja kontrol halaman
     list_status = [t.status for t in transaksi_user]
+    total_indikator_count = len(indikator_ids)
 
     if not list_status:
         status_halaman = "KOSONG"
@@ -501,33 +588,48 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
         status_halaman = "DRAF"
     elif "SUBMITTED" in list_status:
         status_halaman = "SUBMITTED"
-    else:
+    elif len(list_status) == total_indikator_count and all(s == "VERIFIED" for s in list_status):
+        # VERIFIED valid hanya jika SELURUH indikator sudah punya transaksi DAN semuanya VERIFIED
         status_halaman = "VERIFIED"
-
-    total_indikator_count = IndikatorEvaluasi.objects.filter(
-        komponen__in=komponen_list
-    ).count()
+    else:
+        # Ada indikator yang belum diisi sama sekali, sisanya VERIFIED -> treat sebagai DRAF
+        # supaya tombol kirim ke supervisor tetap tampil (terkunci karena belum lengkap)
+        status_halaman = "DRAF"
     
+    # Flatten semua indikator dari tree ke list datar
+    def flatten_indikator(node_list):
+        result = []
+        def _walk(nodes):
+            for node in nodes:
+                for ind in node.indikator_list.all():
+                    result.append((node, ind))
+                _walk(node.children)
+        _walk(node_list)
+        return result
+
+    semua_indikator_flat = flatten_indikator(komponen_list)
+
     context = {
         "indeks_aktif": indeks_aktif,
         "komponen_list": komponen_list,
         "jawaban_map": jawaban_map,
         "status_halaman": status_halaman,
         "total_indikator_count": total_indikator_count,
+        "semua_indikator_flat": semua_indikator_flat,  # ← tambah ini
     }
     
     # === TARUH DI SINI (views.py) ===
-    print("\n" + "="*50)
-    print("🔍 DEBUGGING ORM: DAFTAR INDIKATOR TERFILTER")
-    print("="*50)
-    for komponen in komponen_list:
-        print(f"🔹 Domain: {komponen.kode_komponen} - {komponen.nama_komponen}")
-        for sub in komponen.sub_komponen.all():
-            print(f"   ├─ Sub-Komponen: {sub.kode_komponen} - {sub.nama_komponen}")
-            # Mengakses indikator_list yang sudah di-prefetch & filter
-            for ind in sub.indikator_list.all():
-                print(f"   │  └─ [ID: {ind.id}] Indikator {ind.nomor_indikator}")
-    print("="*50 + "\n")
+    # print("\n" + "="*50)
+    # print("🔍 DEBUGGING ORM: DAFTAR INDIKATOR TERFILTER")
+    # print("="*50)
+    # for komponen in komponen_list:
+    #     print(f"🔹 Domain: {komponen.kode_komponen} - {komponen.nama_komponen}")
+    #     for sub in komponen.sub_komponen.all():
+    #         print(f"   ├─ Sub-Komponen: {sub.kode_komponen} - {sub.nama_komponen}")
+    #         # Mengakses indikator_list yang sudah di-prefetch & filter
+    #         for ind in sub.indikator_list.all():
+    #             print(f"   │  └─ [ID: {ind.id}] Indikator {ind.nomor_indikator}")
+    # print("="*50 + "\n")
     # ===============================
 
     return render(request, "evaluasi/kuesioner_form.html", context)
@@ -595,6 +697,7 @@ def verifikasi_list_view(request):
                 indeks=transaksi.indeks_aktif,
                 opd=transaksi.opd_pengisi_terakhir,
             )
+            kirim_notifikasi_ke_operator(transaksi, "APPROVE")
             messages.success(request, f"✅ Sukses memverifikasi Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd_pengisi_terakhir.nama_opd}.")
  
         elif action == "reject":
@@ -607,6 +710,7 @@ def verifikasi_list_view(request):
                 indeks=transaksi.indeks_aktif,
                 opd=transaksi.opd_pengisi_terakhir,
             )
+            kirim_notifikasi_ke_operator(transaksi, "REJECT")
             messages.warning(request, f"❌ Indikator {transaksi.indikator.nomor_indikator} milik {transaksi.opd_pengisi_terakhir.nama_opd} dikembalikan ke draf untuk revisi.")
  
         indeks_terpilih = request.GET.get('indeks', '')
@@ -637,7 +741,7 @@ def verifikasi_list_view(request):
     if indeks_terpilih and indeks_terpilih != "all":
         query_ajuan = query_ajuan.filter(indeks_aktif_id=indeks_terpilih)
     
-    daftar_ajuan = query_ajuan.order_by("indikator__nomor_indikator")
+    daftar_ajuan = query_ajuan.order_by("-indeks_aktif__kode_indeks", "indikator__nomor_indikator")
     
     # ---- RIWAYAT: Sudah Disahkan (VERIFIED) + Pernah Ditolak (DRAF + ada catatan supervisor) ----
     query_riwayat = TransaksiEvaluasi.objects.filter(
@@ -657,11 +761,18 @@ def verifikasi_list_view(request):
     
     daftar_riwayat = query_riwayat.order_by("-updated_at")  # Terbaru dulu
     
+    indeks_terpilih_label = None
+    if indeks_terpilih and indeks_terpilih != "all":
+        indeks_obj_terpilih = semua_indeks.filter(id=indeks_terpilih).first()
+        if indeks_obj_terpilih:
+            indeks_terpilih_label = f"📊 {indeks_obj_terpilih.kode_indeks} - Th. {indeks_obj_terpilih.tahun_berlaku}"
+
     context = {
         "semua_indeks":    semua_indeks,
         "indeks_terpilih": indeks_terpilih,
         "daftar_ajuan":    daftar_ajuan,
-        "daftar_riwayat":  daftar_riwayat,  
+        "daftar_riwayat":  daftar_riwayat,
+        "indeks_terpilih_label": indeks_terpilih_label,
     }
     return render(request, "evaluasi/verifikasi_list.html", context)
 
@@ -891,13 +1002,14 @@ def activity_log_view(request):
     logs = ActivityLog.objects.select_related("user", "user__profile", "opd", "indeks")
 
     # ---------- Filter hak akses ----------
+    opd_ids_terkait  = []
     if user_role == "SUPERVISOR":
         # Supervisor: hanya lihat log operator dari OPD yang ada di indeks aksesnya
         indeks_akses     = user_profile.indeks_akses.all()
         opd_ids_terkait  = (
             TransaksiEvaluasi.objects
             .filter(indeks_aktif__in=indeks_akses)
-            .values_list("opd_id", flat=True)
+            .values_list("opd_pengisi_terakhir_id", flat=True)
             .distinct()
         )
         logs = logs.filter(
@@ -909,6 +1021,7 @@ def activity_log_view(request):
     filter_aksi  = request.GET.get("aksi", "")
     filter_opd   = request.GET.get("opd", "")
     filter_user  = request.GET.get("user", "")
+    filter_nip   = request.GET.get("nip", "")
 
     if filter_aksi:
         logs = logs.filter(aksi=filter_aksi)
@@ -916,6 +1029,8 @@ def activity_log_view(request):
         logs = logs.filter(opd_id=filter_opd)
     if filter_user:
         logs = logs.filter(user__username__icontains=filter_user)
+    if filter_nip:
+        logs = logs.filter(user__profile__nip__icontains=filter_nip)
 
     logs = logs[:200]  # Batasi 200 entri terbaru
 
@@ -934,6 +1049,70 @@ def activity_log_view(request):
         "filter_aksi": filter_aksi,
         "filter_opd":  filter_opd,
         "filter_user": filter_user,
+        "filter_nip":  filter_nip,
         "user_role":   user_role,
     }
     return render(request, "evaluasi/activity_log.html", context)
+
+# ==============================================================================
+# NOTIFIKASI VIEW & ENDPOINT AJAX
+# ==============================================================================
+@login_required(login_url="login")
+def notifikasi_fetch_view(request):
+    """
+    AJAX endpoint — kembalikan max 20 notifikasi terbaru user yang login.
+    Dipanggil saat user klik bell icon untuk membuka dropdown.
+    """
+    notif_qs = Notifikasi.objects.filter(
+        penerima=request.user
+    ).select_related("indeks", "transaksi__indikator")[:20]
+ 
+    data = []
+    for n in notif_qs:
+        waktu_lokal = timezone.localtime(n.created_at)
+        data.append({
+            "id":           n.id,
+            "tipe":         n.tipe,
+            "judul":        n.judul,
+            "pesan":        n.pesan,
+            "sudah_dibaca": n.sudah_dibaca,
+            "kode_indeks":  n.indeks.kode_indeks,
+            "created_at":   waktu_lokal.strftime("%d %b %Y, %H:%M WIB"),
+        })
+ 
+    return JsonResponse({"status": "ok", "notifikasi": data}) 
+ 
+@login_required(login_url="login")
+def notifikasi_baca_view(request):
+    """
+    AJAX endpoint POST — tandai notifikasi sebagai sudah dibaca.
+    Kirim { "notif_id": <id> } untuk satu notif, atau { "semua": true } untuk bulk.
+    """
+    if request.method != "POST":
+        return JsonResponse({"status": "error", "msg": "Method not allowed"}, status=405)
+ 
+    import json
+    try:
+        body = json.loads(request.body)
+    except Exception:
+        return JsonResponse({"status": "error", "msg": "Invalid JSON"}, status=400)
+ 
+    if body.get("semua"):
+        Notifikasi.objects.filter(penerima=request.user, sudah_dibaca=False).update(sudah_dibaca=True)
+    else:
+        notif_id = body.get("notif_id")
+        if notif_id:
+            Notifikasi.objects.filter(id=notif_id, penerima=request.user).update(sudah_dibaca=True)
+ 
+    unread_count = Notifikasi.objects.filter(penerima=request.user, sudah_dibaca=False).count()
+    return JsonResponse({"status": "ok", "unread_count": unread_count})
+ 
+ 
+@login_required(login_url="login")
+def notifikasi_poll_view(request):
+    """
+    AJAX endpoint ringan — hanya kembalikan jumlah notif belum dibaca.
+    Dipanggil setiap 30 detik oleh JS di base.html untuk update badge bell.
+    """
+    count = Notifikasi.objects.filter(penerima=request.user, sudah_dibaca=False).count()
+    return JsonResponse({"status": "ok", "unread_count": count})

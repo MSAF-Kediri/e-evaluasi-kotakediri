@@ -1,22 +1,52 @@
 {% load static %}
 <div class="sidebar" style="width: 260px; background: #0f172a; color: #f8fafc; height: 100vh; position: sticky; top: 0; padding: 24px 16px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid #1e293b; box-shadow: 4px 0 24px rgba(0,0,0,0.15);">
   
-  <!-- KONTEN ATAS: BRANDING HEADER (TETAP DIAM DI ATAS) -->
+  <!-- KONTEN ATAS: BRANDING HEADER -->
   <div class="brand" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding: 0 4px; flex-shrink: 0;">
     <div style="display: flex; align-items: center; gap: 12px;">
       <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">
-        <img src="{% static 'evaluasi/Logo_Kota_Kediri.png' %}" alt="Logo Pemkot Kediri" class="w-14 h-14 object-contain">
+        <img src="{% static 'evaluasi/logo_branding.png' %}" alt="Logo Branding" class="w-14 h-14 object-contain">
       </div>
       <div>
         <h2 style="font-size: 15px; font-weight: 700; margin: 0; letter-spacing: 0.5px; color: #ffffff;">E-EVALUASI</h2>
         <span style="font-size: 11px; color: #94a3b8; font-weight: 500;">Pemkot Kediri</span>
       </div>
     </div>
-    <!-- Tombol Sembunyikan Menu -->
-    <button type="button" onclick="globalToggleSidebar()" title="Sembunyikan Menu" style="background: #1e293b; border: none; color: #94a3b8; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; font-size: 12px;">◀</button>
+    <div style="display: flex; align-items: center; gap: 6px;">
+
+      <!-- ================================================================
+           BELL ICON NOTIFIKASI — hanya tampil untuk OPERATOR
+      ================================================================ -->
+      {% if request.user.profile.role == 'OPERATOR' %}
+      <button type="button" id="btnBellNotif"
+              onclick="bukaModalNotifikasi()"
+              title="Notifikasi"
+              style="position: relative; background: #1e293b; border: none; color: #94a3b8;
+                     width: 32px; height: 32px; border-radius: 8px;
+                     display: flex; align-items: center; justify-content: center;
+                     cursor: pointer; transition: all 0.2s ease; font-size: 15px;">
+        🔔
+        <!-- Badge merah -->
+        <span id="notifBadge"
+              style="display: {% if notif_unread_count > 0 %}flex{% else %}none{% endif %};
+                     position: absolute; top: -5px; right: -5px;
+                     background: #ef4444; color: white;
+                     font-size: 9px; font-weight: 900;
+                     min-width: 17px; height: 17px; border-radius: 50%;
+                     align-items: center; justify-content: center;
+                     border: 2px solid #0f172a; line-height: 1; padding: 0 2px;">
+          {{ notif_unread_count|default:"0" }}
+        </span>
+      </button>
+      {% endif %}
+
+      <!-- Tombol Sembunyikan Menu -->
+      <button type="button" onclick="globalToggleSidebar()" title="Sembunyikan Menu"
+              style="background: #1e293b; border: none; color: #94a3b8; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; font-size: 12px;">◀</button>
+    </div>
   </div>
 
-  <!-- AREA TENGAH: NAVIGASI UTAMA (OTOMATIS SCROLL HANYA DI BAGIAN INI JIKA MENU PENUH) -->
+  <!-- AREA TENGAH: NAVIGASI UTAMA -->
   <div style="flex-grow: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 16px;" class="custom-sidebar-scroll">
     <nav style="display: flex; flex-direction: column; gap: 6px;">
       <!-- DASHBOARD -->
@@ -31,13 +61,12 @@
             </div>
             <span id="panahEvaluasi" style="font-size: 11px; transition: transform 0.3s ease; transform: rotate(0deg);">▼</span>
           </button>
-
           <div id="dropdownEvaluasi" style="max-height: 0; overflow: hidden; transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: #1e293b; border-radius: 8px; margin-top: 4px; padding: 0 4px;">
             <div style="padding: 6px 0;">
-              {% for indeks in indeks_global_list %}
+              {% for indeks in indeks_belum_sah_list %}
                 <a href="{% url 'kuesioner_isi' indeks.kode_indeks %}" class="sub-nav-link" style="display: flex; align-items: center; gap: 10px; color: #cbd5e1; text-decoration: none; padding: 10px 12px 10px 36px; border-radius: 6px; font-size: 13px; font-weight: 500; transition: all 0.2s ease;"><span style="color: #3b82f6;">•</span> {{ indeks.kode_indeks }} <span style="font-size: 11px; color: #64748b; margin-left: auto;">{{ indeks.tahun_berlaku }}</span></a>
               {% empty %}
-                <p style="color: #64748b; font-size: 12px; padding: 10px 12px 10px 36px; margin: 0;">Belum ada master indeks.</p>
+                <p style="color: #64748b; font-size: 12px; padding: 10px 12px 10px 36px; margin: 0;">Semua instrumen sudah disahkan ✅</p>
               {% endfor %}
             </div>
           </div>
@@ -53,7 +82,6 @@
             </div>
             <span id="panahHasil" style="font-size: 11px; transition: transform 0.3s ease; transform: rotate(0deg);">▼</span>
           </button>
-        
           <div id="dropdownHasil" style="max-height: 0; overflow: hidden; transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: #1e293b; border-radius: 8px; margin-top: 4px; padding: 0 4px;">
             <div style="padding: 6px 0;">
               {% for indeks in indeks_global_list %}
@@ -67,7 +95,7 @@
             </div>
           </div>
         </div>
-        {% endif %}
+      {% endif %}
 
       <!-- AUDIT & VERIFIKASI -->
       {% if request.user.profile.role == 'SUPERVISOR' or request.user.profile.role == 'SUPERADMIN' %}
@@ -82,13 +110,13 @@
       {% if request.user.profile.role == 'SUPERADMIN' %}
         <div style="margin-top: 12px;">
           <div style="color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 12px 6px 12px;">Konfigurasi Pusat</div>
-          <a href="/tim-internal-evaluasi/" target="_blank" class="nav-link admin-link" style="display: flex; align-items: center; gap: 12px; color: #fca5a5; text-decoration: none; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; transition: all 0.2s ease;"><span style="font-size: 18px;">⚙️</span> Django Admin</a>
+          <a href="/tim-internal-evaluasi/" target="_blank" class="nav-link admin-link" style="display: flex; align-items: center; gap: 12px; color: #fca5a5; text-decoration: none; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; transition: all 0.2s ease;"><span style="font-size: 18px;">⚙️</span> Masuk Admin</a>
         </div>
       {% endif %}
     </nav>
   </div>
 
-  <!-- KONTEN BAWAH: FOOTER SIDEBAR & LOGOUT (TETAP DIAM TERKUNCI DI BAWAH) -->
+  <!-- KONTEN BAWAH: FOOTER & LOGOUT -->
   <div style="flex-shrink: 0;">
     <hr style="border: 0; border-top: 1px solid #1e293b; margin-bottom: 16px; margin-top: 0;" />
     <a href="{% url 'logout' %}" class="logout-link" style="display: flex; align-items: center; gap: 12px; color: #f87171; text-decoration: none; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; transition: all 0.2s ease; background: rgba(248,113,113,0.05);"><span style="font-size: 18px;">🚪</span> Keluar Aplikasi</a>
@@ -96,119 +124,127 @@
   </div>
 </div>
 
-<!-- CSS HOVER, TRANSISI, & MODIFIKASI SCROLLBAR TIPIS -->
+<!-- CSS -->
 <style>
-  .nav-link:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #ffffff !important;
+  @keyframes notifModalIn {
+    from { opacity: 0; transform: scale(0.94) translateY(12px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
   }
-  .sub-nav-link:hover {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6 !important;
-    padding-left: 40px !important;
+
+  .nav-link:hover { background: rgba(255,255,255,0.05); color: #ffffff !important; }
+  .sub-nav-link:hover { background: rgba(59,130,246,0.1); color: #3b82f6 !important; padding-left: 40px !important; }
+  .admin-link:hover { background: rgba(252,165,165,0.1); color: #fca5a5 !important; }
+  .logout-link:hover { background: #ef4444 !important; color: white !important; box-shadow: 0 4px 12px rgba(239,68,68,0.2); }
+
+  .custom-sidebar-scroll::-webkit-scrollbar { width: 5px; }
+  .custom-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  .custom-sidebar-scroll::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+  .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+  #notifModalList::-webkit-scrollbar { width: 5px; }
+  #notifModalList::-webkit-scrollbar-track { background: transparent; }
+  #notifModalList::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+
+  .notif-item {
+    padding: 16px 24px;
+    cursor: pointer;
+    border-bottom: 1px solid #0f172a;
+    transition: background 0.15s ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    text-decoration: none;
   }
-  .admin-link:hover {
-    background: rgba(252, 165, 165, 0.1);
-    color: #fca5a5 !important;
-  }
-  .logout-link:hover {
-    background: #ef4444 !important;
-    color: white !important;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
-  }
-  
-  /* Membuat scrollbar area menu tampil tipis dan elegan ala modern dashboard */
-  .custom-sidebar-scroll::-webkit-scrollbar {
-    width: 5px;
-  }
-  .custom-sidebar-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-sidebar-scroll::-webkit-scrollbar-thumb {
-    background: #1e293b;
-    border-radius: 10px;
-  }
-  .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-    background: #334155;
-  }
+  .notif-item:hover { background: rgba(255,255,255,0.04) !important; }
+  .notif-item:last-child { border-bottom: none; }
 </style>
 
-<!-- SCRIPT PENGENDALI DROPDOWN (STATE RETENTION FIXED & OPTIMIZED) -->
+<!-- SCRIPT -->
 <script>
-  // 1. Fungsi Utama untuk Buka/Tutup Dropdown dan Menyimpan Statusnya
-  function toggleDropdown(idDropdown, idPanah, saveState = true) {
-    const dropdown = document.getElementById(idDropdown);
-    const panah = document.getElementById(idPanah);
-    
-    if (!dropdown || !panah) return;
-
-    // Periksa apakah sedang tertutup atau belum diset tinggi maksimalnya
-    if (dropdown.style.maxHeight === '0px' || !dropdown.style.maxHeight) {
-      // AKSI: MEMBUKA DROPDOWN
-      dropdown.style.maxHeight = dropdown.scrollHeight + 'px';
-      panah.style.transform = 'rotate(180deg)';
-      panah.style.color = '#3b82f6';
-      
-      if (saveState) {
-        localStorage.setItem(`dropdown_state_${idDropdown}`, 'open');
-      }
-    } else {
-      // AKSI: MENUTUP DROPDOWN
-      dropdown.style.maxHeight = '0px';
-      panah.style.transform = 'rotate(0deg)';
-      panah.style.color = '#94a3b8';
-      
-      if (saveState) {
-        localStorage.setItem(`dropdown_state_${idDropdown}`, 'closed');
-      }
-    }
-    
-    // Sinkronisasi ulang tinggi parent scroll area agar animasi dropdown berjalan luwes
-    setTimeout(() => {
-        const scrollArea = document.querySelector('.custom-sidebar-scroll');
-        if (scrollArea) { scrollArea.style.overflowY = 'auto'; }
-    }, 300);
+  // ============================================================
+  // HELPER CSRF
+  // ============================================================
+  function getCsrfToken() {
+    const c = document.cookie.split(';').find(x => x.trim().startsWith('csrftoken='));
+    return c ? c.trim().substring('csrftoken='.length) : '';
   }
 
-  // 2. JALANKAN SAAT HALAMAN SELESAI DIMUAT (RESTORE STATE)
-  document.addEventListener("DOMContentLoaded", function() {
-    // Daftarkan pasangan ID Dropdown dan ID Panahnya secara berpasangan agar presisi
-    const dropdownMapping = {
+  // ============================================================
+  // DROPDOWN MENU NAVIGASI (Sistem Accordion — Hanya 1 Terbuka)
+  // ============================================================
+  function toggleDropdown(idDropdown, idPanah, saveState = true) {
+    const dropdown = document.getElementById(idDropdown);
+    const panah    = document.getElementById(idPanah);
+    if (!dropdown || !panah) return;
+
+    // Daftar semua dropdown & panah yang ada di dalam aplikasi
+    const semuaDropdown = {
       'dropdownEvaluasi': 'panahEvaluasi',
       'dropdownHasil': 'panahHasil'
     };
 
-    // Cek otomatis kondisi halaman saat ini (Aktifkan otomatis jika sedang berada di jalur hasil indeks)
-    if (window.location.pathname.includes('/hasil/')) {
-      localStorage.setItem('dropdown_state_dropdownHasil', 'open');
-    }
-    
-    // Cek otomatis kondisi halaman saat ini (Aktifkan otomatis jika sedang berada di jalur kuesioner)
-    if (window.location.pathname.includes('/kuesioner/')) {
-      localStorage.setItem('dropdown_state_dropdownEvaluasi', 'open');
+    // Kondisi jika menu yang diklik saat ini posisinya mau MENGALAMI PROSES MEMBUKA
+    if (dropdown.style.maxHeight === '0px' || !dropdown.style.maxHeight) {
+      
+      // 1. TUTUP SEMUA DROPDOWN LAIN TERLEBIH DAHULU
+      Object.keys(semuaDropdown).forEach(keyId => {
+        if (keyId !== idDropdown) { // Kecuali menu yang sedang kita klik
+          const dropLain  = document.getElementById(keyId);
+          const panahLain = document.getElementById(semuaDropdown[keyId]);
+          if (dropLain && panahLain) {
+            dropLain.style.maxHeight = '0px';
+            panahLain.style.transform = 'rotate(0deg)';
+            panahLain.style.color     = '#94a3b8';
+            if (saveState) localStorage.setItem(`dropdown_state_${keyId}`, 'closed');
+          }
+        }
+      });
+
+      // 2. LALU BUKA DROPDOWN YANG DIKLIK USER
+      dropdown.style.maxHeight = dropdown.scrollHeight + 'px';
+      panah.style.transform    = 'rotate(180deg)';
+      panah.style.color        = '#3b82f6';
+      if (saveState) localStorage.setItem(`dropdown_state_${idDropdown}`, 'open');
+      
+    } else {
+      // Kondisi jika menu yang diklik justru ingin DITUTUP kembali
+      dropdown.style.maxHeight = '0px';
+      panah.style.transform    = 'rotate(0deg)';
+      panah.style.color        = '#94a3b8';
+      if (saveState) localStorage.setItem(`dropdown_state_${idDropdown}`, 'closed');
     }
 
-    // Jalankan restorasi state berdasarkan localStorage
+    setTimeout(() => {
+      const scrollArea = document.querySelector('.custom-sidebar-scroll');
+      if (scrollArea) scrollArea.style.overflowY = 'auto';
+    }, 300);
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const dropdownMapping = { 'dropdownEvaluasi': 'panahEvaluasi', 'dropdownHasil': 'panahHasil' };
+    
+    // Logika Auto-Open berdasarkan URL Halaman yang sedang aktif saat ini
+    if (window.location.pathname.includes('/hasil/')) {
+        localStorage.setItem('dropdown_state_dropdownHasil', 'open');
+        localStorage.setItem('dropdown_state_dropdownEvaluasi', 'closed'); // Tutup saudaranya
+    }
+    if (window.location.pathname.includes('/kuesioner/')) {
+        localStorage.setItem('dropdown_state_dropdownEvaluasi', 'open');
+        localStorage.setItem('dropdown_state_dropdownHasil', 'closed'); // Tutup saudaranya
+    }
+
     Object.keys(dropdownMapping).forEach(idDropdown => {
       const idPanah = dropdownMapping[idDropdown];
-      const state = localStorage.getItem(`dropdown_state_${idDropdown}`);
-      
-      if (state === 'open') {
+      if (localStorage.getItem(`dropdown_state_${idDropdown}`) === 'open') {
         const dropdown = document.getElementById(idDropdown);
-        const panah = document.getElementById(idPanah);
-        
+        const panah    = document.getElementById(idPanah);
         if (dropdown && panah) {
-          // Matikan transisi CSS sebentar agar menu langsung terbuka tanpa ada kedipan animasi saat reload
           dropdown.style.transition = 'none';
-          panah.style.transition = 'none';
-          
-          // Jalankan fungsi bukaan (saveState di-set ke false agar tidak menimpa nilai)
+          panah.style.transition    = 'none';
           toggleDropdown(idDropdown, idPanah, false);
-          
-          // Kembalikan kelenturan transisi setelah browser selesai me-render layout asli
           setTimeout(() => {
             dropdown.style.transition = 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-            panah.style.transition = 'transform 0.3s ease, color 0.3s ease';
+            panah.style.transition    = 'transform 0.3s ease, color 0.3s ease';
           }, 50);
         }
       }

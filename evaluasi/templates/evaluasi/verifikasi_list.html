@@ -24,19 +24,36 @@
             </label>
             <p class="text-[11px] text-slate-400 font-medium">Pilih indeks spesifik untuk membatasi daftar ajuan di bawah</p>
         </div>
-        <div class="w-full sm:w-72">
-            <select id="filter-indeks" 
-                    onchange="jalankanFilterIndeks(this.value)"
-                    class="w-full text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer">
-                <option value="all" {% if indeks_terpilih == 'all' or not indeks_terpilih %}selected{% endif %}>
+        <div class="w-full sm:w-80 relative" id="indeks-combobox">
+            <input type="text" 
+                id="indeks-search-input"
+                autocomplete="off"
+                placeholder="🔎 Cari kode atau nama indeks..."
+                value="{{ indeks_terpilih_label|default:'🌍 Tampilkan Semua Indeks (Gabungan)' }}"
+                onfocus="bukaDropdownIndeks()"
+                oninput="filterOpsiIndeks(this.value)"
+                class="w-full text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer">
+
+            <input type="hidden" id="filter-indeks-value" value="{{ indeks_terpilih|default:'all' }}">
+
+            <div id="indeks-dropdown-list" 
+                class="hidden absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                <div data-id="all" data-text="tampilkan semua indeks gabungan"
+                    onclick="pilihIndeks('all', '🌍 Tampilkan Semua Indeks (Gabungan)')"
+                    class="px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-indigo-50 cursor-pointer border-b border-slate-100">
                     🌍 Tampilkan Semua Indeks (Gabungan)
-                </option>
+                </div>
                 {% for indeks in semua_indeks %}
-                    <option value="{{ indeks.id }}" {% if indeks_terpilih == indeks.id|stringformat:"s" %}selected{% endif %}>
-                        📊 {{ indeks.kode_indeks }} - Th. {{ indeks.tahun_berlaku }}
-                    </option>
+                <div data-id="{{ indeks.id }}" 
+                    data-text="{{ indeks.kode_indeks|lower }} {{ indeks.nama_indeks|lower }} {{ indeks.tahun_berlaku }}"
+                    onclick="pilihIndeks('{{ indeks.id }}', '📊 {{ indeks.kode_indeks }} - Th. {{ indeks.tahun_berlaku }}')"
+                    class="px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                    📊 {{ indeks.kode_indeks }} - Th. {{ indeks.tahun_berlaku }}
+                    <span class="block text-[10px] text-slate-400 font-normal mt-0.5">{{ indeks.nama_indeks }}</span>
+                </div>
                 {% endfor %}
-            </select>
+                <div id="indeks-no-result" class="hidden px-4 py-3 text-xs text-slate-400 italic text-center">Tidak ditemukan...</div>
+            </div>
         </div>
     </div>
 
@@ -98,7 +115,7 @@
                         <tr class="hover:bg-slate-50/60 transition-colors">
                             <td class="p-4">
                                 <span class="font-bold text-slate-900 block truncate max-w-[200px]">
-                                    {{ ajuan.opd.nama_opd|default:"Pusat / Non-OPD" }}
+                                    {{ ajuan.opd_pengisi_terakhir.nama_opd|default:"Pusat / Non-OPD" }}
                                 </span>
                                 <span class="text-[10px] text-slate-400 block mt-0.5">
                                     {% if ajuan.user_updated_by %}Oleh: @{{ ajuan.user_updated_by.username }}{% else %}Oleh: @sistem{% endif %}
@@ -205,7 +222,7 @@
                             <!-- OPD -->
                             <td class="p-4">
                                 <span class="font-bold text-slate-900 block truncate max-w-[200px]">
-                                    {{ tx.opd.nama_opd|default:"Pusat / Non-OPD" }}
+                                    {{ tx.opd_pengisi_terakhir.nama_opd|default:"Pusat / Non-OPD" }}
                                 </span>
                                 {% if tx.user_updated_by %}
                                 <span class="text-[10px] text-slate-400 block mt-0.5">@{{ tx.user_updated_by.username }}</span>
@@ -431,7 +448,7 @@
         {% for ajuan in daftar_ajuan %}
         {{ ajuan.id }}: {
             "transaksi_id":           "{{ ajuan.id }}",
-            "opd_nama":               "{{ ajuan.opd.nama_opd|default:'Pusat / Non-OPD'|escapejs }}",
+            "opd_nama":               "{{ ajuan.opd_pengisi_terakhir.nama_opd|default:'Pusat / Non-OPD'|escapejs }}",
             "operator_username":      "{% if ajuan.user_updated_by %}@{{ ajuan.user_updated_by.username }}{% else %}@sistem{% endif %}",
             "nomor_indikator":        "{{ ajuan.indikator.nomor_indikator }}",
             "nama_indikator":         "{{ ajuan.indikator.nama_indikator|escapejs }}",
@@ -671,7 +688,35 @@
 
 <!-- Filter Indeks Script -->
 <script>
+    function bukaDropdownIndeks() {
+        document.getElementById('indeks-dropdown-list').classList.remove('hidden');
+        document.getElementById('indeks-search-input').select();
+    }
+
+    function filterOpsiIndeks(keyword) {
+        const kw = keyword.toLowerCase().trim();
+        const items = document.querySelectorAll('#indeks-dropdown-list > div[data-id]');
+        let adaHasil = false;
+
+        items.forEach(item => {
+            const cocok = item.dataset.text.includes(kw);
+            item.classList.toggle('hidden', !cocok);
+            if (cocok) adaHasil = true;
+        });
+
+        document.getElementById('indeks-no-result').classList.toggle('hidden', adaHasil);
+        document.getElementById('indeks-dropdown-list').classList.remove('hidden');
+    }
+
+    function pilihIndeks(id, label) {
+        document.getElementById('indeks-search-input').value = label;
+        document.getElementById('filter-indeks-value').value = id;
+        document.getElementById('indeks-dropdown-list').classList.add('hidden');
+        jalankanFilterIndeks(id);
+    }
+
     function jalankanFilterIndeks(idIndeks) {
+        showLoadingScreen();
         const urlKini = new URL(window.location.href);
         if (idIndeks && idIndeks !== 'all') {
             urlKini.searchParams.set('indeks', idIndeks);
@@ -680,5 +725,13 @@
         }
         window.location.href = urlKini.toString();
     }
+
+    // Tutup dropdown kalau klik di luar
+    document.addEventListener('click', (e) => {
+        const combo = document.getElementById('indeks-combobox');
+        if (combo && !combo.contains(e.target)) {
+            document.getElementById('indeks-dropdown-list').classList.add('hidden');
+        }
+    });
 </script>
 {% endblock %}

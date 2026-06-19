@@ -265,6 +265,7 @@
     }
 
     function pindahOpd(opdId) {
+        showLoadingScreen();
         const url = new URL(window.location.href);
         if (opdId === 'all') {
             url.searchParams.delete('opd_id');

@@ -1,0 +1,86 @@
+<div id="global-loading-overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999999] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 max-w-xs text-center border border-slate-100">
+        <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        <div>
+            <h3 class="text-sm font-bold text-slate-800">Memproses Data...</h3>
+            <p class="text-xs text-slate-500 mt-1">Mohon tunggu sejenak, sistem sedang mengamankan data Anda.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Script untuk memunculkan loading screen saat form disubmit -->
+<script>
+    // Fungsi memunculkan loading screen
+    function showLoadingScreen() {
+        const overlay = document.getElementById('global-loading-overlay');
+        if (overlay) {
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+        }
+    }
+
+    function hideLoadingScreen() {
+        const overlay = document.getElementById('global-loading-overlay');
+        if (overlay) {
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+        }
+    }
+
+    // Picu saat berpindah halaman via Klik Link (Anchor Tag)
+    document.addEventListener("click", function(event) {
+        // Cari apakah yang diklik adalah tag <a> atau bapaknya adalah tag <a>
+        const link = event.target.closest('a');
+        
+        if (link) {
+            const href = link.getAttribute('href');
+            const target = link.getAttribute('target');
+            
+            // Saring agar link download, javascript kosong, target tab baru, atau anchor internal (#) tidak memicu loading
+            if (
+                href && 
+                !href.startsWith('#') && 
+                !href.startsWith('javascript:') && 
+                target !== '_blank' &&
+                !link.hasAttribute('download')
+            ) {
+                showLoadingScreen();
+            }
+        }
+    });
+
+    // Picu saat form disubmit
+    document.addEventListener("submit", function(event) {
+        // Pastikan bukan form fiktif atau yang di-cancel
+        if (!event.defaultPrevented) {
+            showLoadingScreen();
+        }
+    });
+
+    // Proteksi Tambahan: Hilangkan loading jika user menekan tombol 'Back' di browser
+    window.addEventListener('pageshow', function(event) {
+        const overlay = document.getElementById('global-loading-overlay');
+        if (overlay) {
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+        }
+    });
+
+        // ------------------------------------------------------------------
+    // Picu saat user me-refresh browser (F5 / tombol reload / Ctrl+R),
+    // menutup tab, atau navigasi keluar halaman lainnya yang belum
+    // tertangkap oleh listener click/submit di atas.
+    // Catatan: beforeunload juga ikut terpicu saat klik link biasa —
+    // tidak masalah, overlay sudah tampil duluan jadi cuma redundant.
+    // ------------------------------------------------------------------
+    window.addEventListener('beforeunload', function() {
+        showLoadingScreen();
+    });
+
+    // ------------------------------------------------------------------
+    // HELPER GLOBAL — dipanggil manual dari kode lain (redirect via JS,
+    // form yang dibuat dinamis lalu di-submit via JS, atau AJAX/fetch)
+    // karena listener click/submit di atas tidak menangkap kasus tersebut.
+    // ------------------------------------------------------------------
+    window.showLoadingScreen = showLoadingScreen;
+
+    window.hideLoadingScreen = hideLoadingScreen;
+</script>
+<!-- End: Script untuk memunculkan loading screen saat form disubmit -->

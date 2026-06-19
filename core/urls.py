@@ -21,12 +21,12 @@ from django.views.generic.base import RedirectView
 urlpatterns = [
     path('tim-internal-evaluasi/', admin.site.urls),
 
-    path('favicon.ico', RedirectView.as_view(url='/static/evaluasi/Logo_Kota_Kediri.png')),
+    path('favicon.ico', RedirectView.as_view(url='/static/evaluasi/logo_branding.png')),
 
     path('', include('evaluasi.urls')), # Menyambungkan jalur ke urls.py milik app evaluasi
 ]
 
 # ================= CUSTOM IDENTITY SUPERADMIN PEMDI =================
 admin.site.site_header = "Superadmin E-Evaluasi PEMDI"     # Mengubah teks Header besar di atas form login & dashboard admin
-admin.site.site_title = "Admin PEMDI Kota Kediri"          # Mengubah teks Title pada Tab Browser (Title Tag)
+admin.site.site_title = "Superadmin E-Evaluasi PEMDI"          # Mengubah teks Title pada Tab Browser (Title Tag)
 admin.site.index_title = "Panel Kontrol Master Data"       # Mengubah teks Selamat Datang di halaman utama setelah login admin

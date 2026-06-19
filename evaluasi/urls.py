@@ -26,4 +26,13 @@ urlpatterns = [
 
     # JALUR BARU 7: Log Aktivitas Pengguna
     path('activity-log/', views.activity_log_view, name='activity_log'),
+
+    # JALUR BARU 8: AJAX — ambil daftar notifikasi (dropdown bell icon)
+    path('notifikasi/fetch/', views.notifikasi_fetch_view, name='notifikasi_fetch'),
+
+    # JALUR BARU 9: AJAX — tandai satu / semua notifikasi sudah dibaca
+    path('notifikasi/baca/', views.notifikasi_baca_view, name='notifikasi_baca'),
+
+    # JALUR BARU 10: Polling ringan — cek jumlah notif belum dibaca (untuk badge bell)
+    path('notifikasi/poll/', views.notifikasi_poll_view, name='notifikasi_poll'),
 ]

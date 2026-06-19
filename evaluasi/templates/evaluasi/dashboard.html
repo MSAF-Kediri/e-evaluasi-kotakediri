@@ -79,8 +79,8 @@
             <p class="text-xs font-semibold text-slate-500 mt-1">Sudah Diverifikasi</p>
         </div>
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
-            <p class="text-3xl font-extrabold text-slate-700">{{ stats.total_opd|default:"0" }}</p>
-            <p class="text-xs font-semibold text-slate-500 mt-1">OPD Aktif Mengisi</p>
+            <p class="text-3xl font-extrabold text-slate-700">{{ stats.total_indeks_aktif|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Indeks Aktif</p>
         </div>
     </div>
     {% endif %}
@@ -89,8 +89,8 @@
     {% if user_role == 'SUPERADMIN' %}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
-            <p class="text-3xl font-extrabold text-slate-900">{{ stats.total_opd|default:"0" }}</p>
-            <p class="text-xs font-semibold text-slate-500 mt-1">OPD Aktif Mengisi</p>
+            <p class="text-3xl font-extrabold text-slate-900">{{ stats.total_indeks_aktif|default:"0" }}</p>
+            <p class="text-xs font-semibold text-slate-500 mt-1">Indeks Aktif</p>
         </div>
         <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm text-center">
             <p class="text-3xl font-extrabold text-amber-600">{{ stats.menunggu|default:"0" }}</p>
@@ -144,23 +144,23 @@
         </div>
 
         <!-- Kartu Aksi Cepat -->
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3 self-start">
             <h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Aksi Cepat</h3>
 
             <!-- Shortcut ke Kuesioner (Operator & Superadmin) -->
-            {% if user_role == 'OPERATOR' or user_role == 'SUPERADMIN' %}
-                {% for indeks in stats.indeks_aktif %}
+            {% if user_role == 'OPERATOR'%}
+                {% for indeks in indeks_belum_sah_list %}
                 <a href="{% url 'kuesioner_isi' indeks.kode_indeks %}"
-                   class="flex items-center justify-between px-4 py-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all group">
-                    <div>
+                   class="flex items-center justify-between gap-4 px-4 py-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all group w-full">
+                    <div class="min-w-0">
                         <p class="text-sm font-bold text-indigo-700">✍️ Isi Kuesioner {{ indeks.kode_indeks }}</p>
                         <p class="text-[11px] text-indigo-500 font-medium">Tahun {{ indeks.tahun_berlaku }}</p>
                     </div>
                     <span class="text-indigo-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
                 </a>
                 {% empty %}
-                <div class="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-400 font-medium">
-                    Belum ada instrumen evaluasi yang ditugaskan.
+                <div class="flex items-center justify-center py-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-600 font-semibold w-full">
+                    ✅ Semua instrumen Anda sudah disahkan, kerja bagus!
                 </div>
                 {% endfor %}
             {% endif %}
@@ -168,27 +168,29 @@
             <!-- Shortcut ke Verifikasi (Supervisor & Superadmin) -->
             {% if user_role == 'SUPERVISOR' or user_role == 'SUPERADMIN' %}
             <a href="{% url 'verifikasi_list' %}"
-               class="flex items-center justify-between px-4 py-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all group">
-                <div>
-                    <p class="text-sm font-bold text-amber-700">🔍 Daftar Ajuan Verifikasi</p>
-                    <p class="text-[11px] text-amber-500 font-medium">Tinjau instrumen yang menunggu persetujuan</p>
-                </div>
-                <span class="text-amber-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
-            </a>
+                class="flex items-center justify-between px-4 py-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all group w-full">
+                    <!-- Bagian Teks Kiri -->
+                    <div class="min-w-0">
+                        <p class="text-sm font-bold text-amber-700">🔍 Daftar Ajuan Verifikasi</p>
+                        <p class="text-[11px] text-amber-500 font-medium">Tinjau instrumen yang menunggu persetujuan</p>
+                    </div>                    
+                    <!-- Bagian Tanda Panah Kanan (Tetap Tegak Lurus & Konsisten) -->
+                    <span class="text-amber-400 group-hover:translate-x-1 transition-transform text-lg flex-shrink-0 pl-2">→</span>
+                </a>
             {% endif %}
 
             <!-- Shortcut ke Admin (Superadmin saja) -->
             {% if user_role == 'SUPERADMIN' %}
-            <a href="/admin/" target="_blank"
+            <a href="/tim-internal-evaluasi/" target="_blank"
                class="flex items-center justify-between px-4 py-3 bg-slate-800 hover:bg-slate-900 rounded-xl transition-all group">
-                <p class="text-sm font-bold text-white">⚙️ Panel Konfigurasi Django Admin</p>
+                <p class="text-sm font-bold text-white">⚙️ Panel Konfigurasi Admin</p>
                 <span class="text-slate-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
             </a>
             {% endif %}
 
             <!-- Tombol Ganti Password — selalu tampil -->
             <button onclick="document.getElementById('modalPassword').style.display='flex'"
-                    class="flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all group w-full text-left mt-auto cursor-pointer">
+                    class="flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all group w-full text-left cursor-pointer">
                 <p class="text-sm font-bold text-slate-700">🔒 Keamanan & Ganti Password</p>
                 <span class="text-slate-400 group-hover:translate-x-1 transition-transform text-lg">→</span>
             </button>
