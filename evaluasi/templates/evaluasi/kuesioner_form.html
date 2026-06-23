@@ -1,5 +1,6 @@
 {% extends "evaluasi/base.html" %}
 {% load evaluasi_filters %}
+{% load l10n %}
 
 {% block content %}
 <div class="max-w-[1400px] mx-auto space-y-6">
@@ -325,13 +326,13 @@
                         {
                             "id": "{{ pil.id }}",
                             "level": "{{ pil.label_level|escapejs }}",
-                            "skor": "{{ pil.nilai_angka }}",
+                            "skor": "{{ pil.nilai_angka|unlocalize }}",
                             "narasi": "{{ pil.narasi_kriteria|escapejs }}"
                         },
                         {% endfor %}
                     ],
                     "jawaban_terpilih": "{{ jawaban.pilihan_mandiri_id|default:'' }}",
-                    "skor_terpilih": "{{ jawaban.pilihan_mandiri.nilai_angka|default:'' }}",
+                    "skor_terpilih": "{{ jawaban.pilihan_mandiri.nilai_angka|unlocalize|default:'' }}",
                     "link_bukti": "{{ jawaban.link_bukti_dukung|default:''|escapejs }}",
                     "catatan": "{{ jawaban.catatan_opd|default:''|escapejs }}",
                     "status": "{{ jawaban.status|default:'DRAF' }}",

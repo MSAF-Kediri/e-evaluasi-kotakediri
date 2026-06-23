@@ -615,7 +615,7 @@ def kuesioner_isi_view(request, kode_indeks="PEMDI"):
         "jawaban_map": jawaban_map,
         "status_halaman": status_halaman,
         "total_indikator_count": total_indikator_count,
-        "semua_indikator_flat": semua_indikator_flat,  # ← tambah ini
+        "semua_indikator_flat": semua_indikator_flat,
     }
     
     # === TARUH DI SINI (views.py) ===
@@ -789,142 +789,205 @@ def hasil_indeks_view(request, kode_indeks):
     semua_opd = None
     opd_terpilih = None
 
-    # Validasi akses indeks
     if user_role != "SUPERADMIN" and not user_profile.indeks_akses.filter(id=indeks_aktif.id).exists():
         messages.error(request, f"⛔ AKSES DITOLAK! Anda tidak terdaftar untuk indeks {kode_indeks}.")
         return redirect("dashboard")
-    
-    # Base filter kueri transaksi
+
     filters = {"indeks_aktif": indeks_aktif}
 
     if user_role in ["SUPERADMIN", "SUPERVISOR"]:
         semua_opd = OPD.objects.filter(
             transaksi_diisi__indeks_aktif=indeks_aktif
         ).distinct().order_by("nama_opd")
-        
+
         opd_id = request.GET.get("opd_id", "all")
         if opd_id and opd_id != "all":
             opd_terpilih = get_object_or_404(OPD, id=opd_id)
-            filters["opd_pengisi_terakhir"] = opd_terpilih 
+            filters["opd_pengisi_terakhir"] = opd_terpilih
     else:
         opd_terpilih = user_profile.opd
-        filters["opd_pengisi_terakhir"] = opd_terpilih # 
+        filters["opd_pengisi_terakhir"] = opd_terpilih
 
-    # Ambil data transaksi sesuai filter (Ganti "opd" menjadi "opd_pengisi_terakhir")
     semua_transaksi = TransaksiEvaluasi.objects.filter(**filters).select_related(
-        "indikator__komponen__parent",
+        "indikator__komponen",
         "pilihan_mandiri",
         "pilihan_verifikasi",
-        "opd_pengisi_terakhir"
+        "opd_pengisi_terakhir",
     ).order_by("indikator__nomor_indikator", "-updated_at")
 
-    # Mapping bobot
     bobot_map = {
         b.indikator_id: b.bobot_nilai
         for b in BobotIndikatorPeriode.objects.filter(jenis_indeks=indeks_aktif)
     }
     total_indikator = len(bobot_map)
 
-    # Fungsi Pembangun Hierarki
-    def bangun_hierarki(transaksi_qs, mode):
-        hierarki = {}
-        total_skor = Decimal("0")
-        total_bobot = Decimal("0")
-        jumlah_terisi = 0
+    # --------------------------------------------------------------------------
+    # AMBIL SELURUH ANCESTOR CHAIN KOMPONEN SECARA BATCH (HINDARI N+1)
+    # --------------------------------------------------------------------------
+    komponen_leaf_ids = {tx.indikator.komponen_id for tx in semua_transaksi}
 
-        for tx in transaksi_qs:
-            if mode == "sementara":
-                pilihan = tx.pilihan_mandiri
-                if not pilihan:
-                    continue
-            else: 
-                pilihan = tx.pilihan_verifikasi
-                if not pilihan or tx.status != "VERIFIED":
-                    continue
+    semua_komponen_map = {}  # {id: KomponenEvaluasi}
+    frontier_ids = set(komponen_leaf_ids)
+    while frontier_ids:
+        batch = KomponenEvaluasi.objects.filter(id__in=frontier_ids)
+        new_parent_ids = set()
+        for k in batch:
+            semua_komponen_map[k.id] = k
+            if k.parent_id and k.parent_id not in semua_komponen_map:
+                new_parent_ids.add(k.parent_id)
+        frontier_ids = new_parent_ids - set(semua_komponen_map.keys())
 
-            indikator = tx.indikator
-            aspek = indikator.komponen
-            domain = aspek.parent
-            bobot = bobot_map.get(indikator.id, Decimal("0"))
-            skor = pilihan.nilai_angka
-            nilai_terbobot = (skor * bobot) / Decimal("100")
+    # --------------------------------------------------------------------------
+    # NODE DINAMIS: tiap komponen jadi node, bobot & nilai diakumulasi bottom-up
+    # --------------------------------------------------------------------------
+    class NodeHasil:
+        """Atribut non-underscore agar aman diakses dari template Django."""
+        def __init__(self, komponen):
+            self.komponen = komponen
+            self.children = []
+            self.indikator_list = []
+            self.total_bobot = Decimal("0")
+            self.total_nilai_sementara = Decimal("0")
+            self.total_nilai_sah = Decimal("0")
+            self.ada_nilai_sah = False
 
-            domain_key = domain.id if domain else aspek.id
-            domain_obj = domain if domain else aspek
+        @property
+        def kode(self):
+            return self.komponen.kode_komponen
 
-            if domain_key not in hierarki:
-                hierarki[domain_key] = {
-                    "kode": domain_obj.kode_komponen,
-                    "nama": domain_obj.nama_komponen,
-                    "aspek_list": {},
-                    "total_bobot": Decimal("0"),
-                    "total_nilai_terbobot": Decimal("0"),
-                }
+        @property
+        def nama(self):
+            return self.komponen.nama_komponen
 
-            aspek_key = aspek.id
-            if aspek_key not in hierarki[domain_key]["aspek_list"]:
-                hierarki[domain_key]["aspek_list"][aspek_key] = {
-                    "kode": aspek.kode_komponen,
-                    "nama": aspek.nama_komponen,
-                    "indikator_list": [],
-                    "total_bobot": Decimal("0"),
-                    "total_nilai_terbobot": Decimal("0"),
-                }
+    node_map = {kid: NodeHasil(k) for kid, k in semua_komponen_map.items()}
+    for kid, node in node_map.items():
+        parent_id = node.komponen.parent_id
+        if parent_id and parent_id in node_map:
+            node_map[parent_id].children.append(node)
 
-            # 🛠️ KOREKSI DI SINI: Ambil dari relasi field baru
-            opd_obj = tx.opd_pengisi_terakhir 
+    root_nodes = [
+        n for n in node_map.values()
+        if not n.komponen.parent_id or n.komponen.parent_id not in node_map
+    ]
 
-            hierarki[domain_key]["aspek_list"][aspek_key]["indikator_list"].append({
-                "nomor": indikator.nomor_indikator,
-                "nama": indikator.nama_indikator,
-                "nama_opd": opd_obj.nama_opd if opd_obj else "-",
-                "singkatan_opd": opd_obj.singkatan if opd_obj and opd_obj.singkatan else (opd_obj.nama_opd[:15] if opd_obj else "-"),
-                "label_level": pilihan.label_level,
-                "skor_mentah": skor,
-                "bobot": bobot,
-                "nilai_terbobot": round(nilai_terbobot, 4),
-                "status": tx.status,
-                "catatan_supervisor": tx.catatan_supervisor or "" if mode == "sah" else "",
-                "sudah_verified": tx.status == "VERIFIED",
-            })
+    # --------------------------------------------------------------------------
+    # ISI BARIS INDIKATOR (LEAF) — satu pass, hasilkan nilai sementara & sah berdampingan
+    # --------------------------------------------------------------------------
+    jumlah_terisi_sementara = 0
+    jumlah_terisi_sah = 0
+    total_skor_sementara = Decimal("0")
+    total_skor_sah = Decimal("0")
 
-            hierarki[domain_key]["aspek_list"][aspek_key]["total_bobot"] += bobot
-            hierarki[domain_key]["aspek_list"][aspek_key]["total_nilai_terbobot"] += nilai_terbobot
-            hierarki[domain_key]["total_bobot"] += bobot
-            hierarki[domain_key]["total_nilai_terbobot"] += nilai_terbobot
-            total_skor += nilai_terbobot
-            total_bobot += bobot
-            jumlah_terisi += 1
+    for tx in semua_transaksi:
+        indikator = tx.indikator
+        bobot = bobot_map.get(indikator.id, Decimal("0"))
+        leaf_node = node_map.get(indikator.komponen_id)
+        if leaf_node is None:
+            continue
 
-        # Sorting data hierarki
-        for d in hierarki.values():
-            d["nilai_domain"] = round(d["total_nilai_terbobot"], 4)
-            d["total_bobot"] = round(d["total_bobot"], 2)
-            for a in d["aspek_list"].values():
-                a["nilai_aspek"] = round(a["total_nilai_terbobot"], 4)
-                a["total_bobot"] = round(a["total_bobot"], 2)
-                a["indikator_list"].sort(key=lambda x: x["nomor"])
+        opd_obj = tx.opd_pengisi_terakhir
 
-        hierarki_list = sorted(hierarki.values(), key=lambda x: x["kode"])
-        for d in hierarki_list:
-            d["aspek_list"] = sorted(d["aspek_list"].values(), key=lambda x: x["kode"])
+        skor_sementara = None
+        label_sementara = None
+        nilai_terbobot_sementara = None
+        if tx.pilihan_mandiri:
+            skor_sementara = tx.pilihan_mandiri.nilai_angka
+            label_sementara = tx.pilihan_mandiri.label_level
+            nilai_terbobot_sementara = round((skor_sementara * bobot) / Decimal("100"), 4)
+            jumlah_terisi_sementara += 1
+            total_skor_sementara += nilai_terbobot_sementara
 
-        return {
-            "nilai_akhir": round(total_skor, 4),
-            "total_bobot": round(total_bobot, 2),
-            "jumlah_terisi": jumlah_terisi,
-            "jumlah_total": total_indikator,
-            "persen": round((jumlah_terisi / total_indikator * 100), 1) if total_indikator > 0 else 0,
-            "hierarki": hierarki_list,
-        }
+        skor_sah = None
+        label_sah = None
+        nilai_terbobot_sah = None
+        sudah_verified = tx.status == "VERIFIED"
+        if sudah_verified and tx.pilihan_verifikasi:
+            skor_sah = tx.pilihan_verifikasi.nilai_angka
+            label_sah = tx.pilihan_verifikasi.label_level
+            nilai_terbobot_sah = round((skor_sah * bobot) / Decimal("100"), 4)
+            jumlah_terisi_sah += 1
+            total_skor_sah += nilai_terbobot_sah
+
+        leaf_node.indikator_list.append({
+            "nomor": indikator.nomor_indikator,
+            "nama": indikator.nama_indikator,
+            "nama_opd": opd_obj.nama_opd if opd_obj else "-",
+            "singkatan_opd": opd_obj.singkatan if opd_obj and opd_obj.singkatan else (opd_obj.nama_opd[:15] if opd_obj else "-"),
+            "bobot": bobot,
+            "label_sementara": label_sementara,
+            "skor_sementara": skor_sementara,
+            "nilai_terbobot_sementara": nilai_terbobot_sementara,
+            "label_sah": label_sah,
+            "skor_sah": skor_sah,
+            "nilai_terbobot_sah": nilai_terbobot_sah,
+            "status": tx.status,
+            "sudah_verified": sudah_verified,
+            "catatan_supervisor": tx.catatan_supervisor or "",
+        })
+
+        leaf_node.total_bobot += bobot
+        if nilai_terbobot_sementara is not None:
+            leaf_node.total_nilai_sementara += nilai_terbobot_sementara
+        if nilai_terbobot_sah is not None:
+            leaf_node.total_nilai_sah += nilai_terbobot_sah
+            leaf_node.ada_nilai_sah = True
+
+    # --------------------------------------------------------------------------
+    # PROPAGASI BOTTOM-UP KE PARENT — aman untuk N-level (urut dari terdalam)
+    # --------------------------------------------------------------------------
+    def hitung_kedalaman(node):
+        depth = 0
+        current = node.komponen.parent_id
+        while current and current in node_map:
+            depth += 1
+            current = node_map[current].komponen.parent_id
+        return depth
+
+    semua_node_terurut = sorted(node_map.values(), key=hitung_kedalaman, reverse=True)
+
+    for node in semua_node_terurut:
+        parent_id = node.komponen.parent_id
+        if parent_id and parent_id in node_map:
+            parent = node_map[parent_id]
+            parent.total_bobot += node.total_bobot
+            parent.total_nilai_sementara += node.total_nilai_sementara
+            parent.total_nilai_sah += node.total_nilai_sah
+            if node.ada_nilai_sah:
+                parent.ada_nilai_sah = True
+
+    # --------------------------------------------------------------------------
+    # FINALISASI: rounding, sorting, buang node yang tidak relevan
+    # --------------------------------------------------------------------------
+    def finalisasi(node):
+        node.total_bobot = round(node.total_bobot, 2)
+        node.total_nilai_sementara = round(node.total_nilai_sementara, 4)
+        node.total_nilai_sah = round(node.total_nilai_sah, 4) if node.ada_nilai_sah else None
+        node.indikator_list.sort(key=lambda x: x["nomor"])
+        node.children = [c for c in node.children if c.total_bobot > 0 or c.indikator_list]
+        node.children.sort(key=lambda x: x.kode)
+        for c in node.children:
+            finalisasi(c)
+
+    root_nodes = [r for r in root_nodes if r.total_bobot > 0 or r.indikator_list]
+    root_nodes.sort(key=lambda x: x.kode)
+    for r in root_nodes:
+        finalisasi(r)
+
+    persen_sementara = round((jumlah_terisi_sementara / total_indikator * 100), 1) if total_indikator > 0 else 0
+    persen_sah = round((jumlah_terisi_sah / total_indikator * 100), 1) if total_indikator > 0 else 0
 
     context = {
         "indeks_aktif": indeks_aktif,
         "semua_opd": semua_opd,
         "opd_terpilih": opd_terpilih,
-        "hasil_sementara": bangun_hierarki(semua_transaksi, "sementara"),
-        "hasil_sah": bangun_hierarki(semua_transaksi, "sah"),
-        "tab_aktif": request.GET.get("tab", "sementara"),
+        "hierarki_root": root_nodes,
+        "nilai_akhir_sementara": round(total_skor_sementara, 4),
+        "nilai_akhir_sah": round(total_skor_sah, 4),
+        "jumlah_terisi_sementara": jumlah_terisi_sementara,
+        "jumlah_terisi_sah": jumlah_terisi_sah,
+        "jumlah_total_indikator": total_indikator,
+        "persen_sementara": persen_sementara,
+        "persen_sah": persen_sah,
         "user_role": user_role,
     }
     return render(request, "evaluasi/hasil_indeks.html", context)
